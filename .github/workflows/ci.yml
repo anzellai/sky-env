@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Install sky compiler
+        run: |
+          curl -fsSL https://github.com/anzellai/sky/releases/latest/download/sky-linux-x64 -o /usr/local/bin/sky
+          chmod +x /usr/local/bin/sky
+          sky --version
+
+      - name: Type-check
+        run: sky check src/Main.sky
+
+      - name: Build
+        run: |
+          rm -rf sky-out .skycache
+          sky install
+          sky build src/Main.sky
+
+      - name: Smoke test (init prints secret)
+        run: |
+          unset SKY_ENV_SECRET
+          ./sky-out/sky-env init | grep -E "^  [0-9a-f]{64}$"
+
+      - name: Smoke test (full round-trip)
+        run: |
+          export SKY_ENV_SECRET=$(head -c 32 /dev/urandom | xxd -p -c 32)
+          mkdir -p /tmp/sky-env-ci && cd /tmp/sky-env-ci
+          echo "API_KEY=test_value_123" > .env.dev
+          echo "DB_URL=postgres://localhost/test" >> .env.dev
+          $GITHUB_WORKSPACE/sky-out/sky-env import dev | grep "Imported 2"
+          $GITHUB_WORKSPACE/sky-out/sky-env print dev | grep "API_KEY=test_value_123"
+          $GITHUB_WORKSPACE/sky-out/sky-env list | grep "sky-env-ci"

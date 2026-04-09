@@ -1,0 +1,105 @@
+module Main exposing (main)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Args as Args
+import Std.Log exposing (println)
+import Cli.Init as Init
+import Cli.Import as Import
+import Cli.Print as Print
+import Cli.Set as Set
+import Cli.List as List_
+import Cli.Diff as Diff
+import Modernc.Org.Sqlite as _
+
+
+main =
+    let
+        command =
+            case Args.getArg 1 of
+
+                Just cmd ->
+                    cmd
+
+                Nothing ->
+                    "help"
+    in
+        dispatch command
+
+
+dispatch : String -> ()
+dispatch command =
+    if command == "init" then
+        Init.runInit ()
+
+    else if command == "import" then
+        case Args.getArg 2 of
+
+            Just env ->
+                Import.runImport env
+
+            Nothing ->
+                let _ = println "Usage: sky-env import <env>" in ()
+
+    else if command == "print" then
+        case Args.getArg 2 of
+
+            Just env ->
+                Print.runPrint env
+
+            Nothing ->
+                let _ = println "Usage: sky-env print <env>" in ()
+
+    else if command == "set" then
+        dispatchSet ()
+
+    else if command == "list" then
+        List_.runList ()
+
+    else if command == "diff" then
+        Diff.runDiff ()
+
+    else
+        printHelp ()
+
+
+dispatchSet : () -> ()
+dispatchSet _ =
+    case Args.getArg 2 of
+
+        Nothing ->
+            let _ = println "Usage: sky-env set <env> <key>" in ()
+
+        Just env ->
+            case Args.getArg 3 of
+
+                Nothing ->
+                    let _ = println "Usage: sky-env set <env> <key>" in ()
+
+                Just key ->
+                    Set.runSet env key
+
+
+printHelp : () -> ()
+printHelp _ =
+    let
+        _ = println "sky-env - Encrypted environment variable manager"
+        _ = println ""
+        _ = println "Usage:"
+        _ = println "  sky-env init               Generate encryption secret"
+        _ = println "  sky-env import <env>       Import .env file into encrypted storage"
+        _ = println "  sky-env print <env>        Print decrypted env vars"
+        _ = println "  sky-env set <env> <key>    Set a variable (prompts for value)"
+        _ = println "  sky-env list               List all projects and environments"
+        _ = println "  sky-env diff               Compare keys across all environments"
+        _ = println ""
+        _ = println "Examples:"
+        _ = println "  sky-env init"
+        _ = println "  sky-env import dev"
+        _ = println "  sky-env set dev API_KEY    # prompts for value securely"
+        _ = println "  sky-env print dev"
+        _ = println "  sky-env print prod > .env"
+        _ = println "  sky-env list"
+        _ = println "  sky-env diff"
+    in
+        ()

@@ -1,0 +1,88 @@
+module Cli.Set exposing (runSet)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Io as Io
+import Std.Log exposing (println)
+import Lib.Os as Os
+import Env.Encrypt as Encrypt
+import Db.Db as Db
+
+
+runSet : String -> String -> ()
+runSet env key =
+    let
+        secret = Os.getEnv "SKY_ENV_SECRET"
+    in
+        if String.isEmpty secret then
+            let
+                _ = println "Error: SKY_ENV_SECRET not set."
+                _ = println "Run 'sky-env init' to generate a secret."
+            in
+                ()
+
+        else
+            promptAndSet secret env key
+
+
+promptAndSet : String -> String -> String -> ()
+promptAndSet secret env key =
+    let
+        _ = Io.writeStdout ("  Enter value for " ++ key ++ ": ")
+        input =
+            case Io.readLine () of
+
+                Just v ->
+                    String.trim v
+
+                Nothing ->
+                    ""
+    in
+        if String.isEmpty input then
+            let _ = println "Cancelled (empty value)." in ()
+
+        else
+            doSet secret env key input
+
+
+doSet : String -> String -> String -> String -> ()
+doSet secret env key value =
+    case Encrypt.encrypt secret value of
+
+        Err e ->
+            let _ = println ("Encrypt error: " ++ e) in ()
+
+        Ok encrypted ->
+            writeVar env key encrypted
+
+
+writeVar : String -> String -> String -> ()
+writeVar env key encrypted =
+    let
+        project = Os.getProjectName ()
+    in
+        case Db.getConn () of
+
+            Err e ->
+                let _ = println ("Database error: " ++ e) in ()
+
+            Ok conn ->
+                case Db.initSchema conn of
+
+                    Err e ->
+                        let _ = println ("Schema error: " ++ e) in ()
+
+                    Ok _ ->
+                        case Db.ensureProject conn project of
+
+                            Err e ->
+                                let _ = println ("Project error: " ++ e) in ()
+
+                            Ok projectId ->
+                                case Db.setVar conn projectId env key encrypted of
+
+                                    Err e ->
+                                        let _ = println ("Error: " ++ e) in ()
+
+                                    Ok _ ->
+                                        let _ = println ("Set " ++ key ++ " in " ++ project ++ "/" ++ env) in ()

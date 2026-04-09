@@ -1,0 +1,163 @@
+module Cli.Diff exposing (runDiff)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.List as List
+import Sky.Core.Dict as Dict
+import Sky.Core.Set as Set
+import Std.Log exposing (println)
+import Lib.Os as Os
+import Db.Db as Db
+
+
+runDiff : () -> ()
+runDiff _ =
+    let
+        project = Os.getProjectName ()
+    in
+        case Db.getConn () of
+
+            Err e ->
+                let _ = println """Database error: {{e}}""" in ()
+
+            Ok conn ->
+                case Db.initSchema conn of
+
+                    Err e ->
+                        let _ = println """Schema error: {{e}}""" in ()
+
+                    Ok _ ->
+                        case Db.ensureProject conn project of
+
+                            Err e ->
+                                let _ = println """Project error: {{e}}""" in ()
+
+                            Ok projectId ->
+                                doDiff conn projectId project
+
+
+doDiff : String -> Int -> String -> ()
+doDiff conn projectId project =
+    case Db.listEnvs conn projectId of
+
+        Err e ->
+            let _ = println """Error: {{e}}""" in ()
+
+        Ok envRows ->
+            let
+                envNames = List.map (\r -> Db.getField "environment" r) envRows
+            in
+                if List.length envNames < 2 then
+                    let
+                        count = String.fromInt (List.length envNames)
+                        _ = println """Only {{count}} environment(s) found. Need at least 2 to diff."""
+                    in
+                        ()
+
+                else
+                    let
+                        envKeys = List.map (\env -> ( env, getKeysForEnv conn projectId env )) envNames
+                        allKeys = collectAllKeys envKeys
+                        _ = println """Comparing environments for {{project}}:"""
+                        _ = println ""
+                        _ = printEnvHeader envNames
+                        _ = println ""
+                        _ = List.map (printKeyRow envKeys) (List.sort (Set.toList allKeys))
+                        missing = findMissing envKeys allKeys
+                    in
+                        if List.isEmpty missing then
+                            let
+                                _ = println ""
+                                _ = println "All environments have the same keys."
+                            in
+                                ()
+
+                        else
+                            let
+                                _ = println ""
+                                _ = println "Missing keys:"
+                                _ = List.map printMissing missing
+                            in
+                                ()
+
+
+getKeysForEnv : String -> Int -> String -> Set.Set String
+getKeysForEnv conn projectId env =
+    case Db.getVars conn projectId env of
+
+        Ok rows ->
+            Set.fromList (List.map (\r -> Db.getField "key" r) rows)
+
+        Err _ ->
+            Set.empty
+
+
+collectAllKeys : (List (String, Set.Set String)) -> Set.Set String
+collectAllKeys envKeys =
+    List.foldl (\pair acc -> Set.union (snd pair) acc) Set.empty envKeys
+
+
+padTo : Int -> String -> String
+padTo width s =
+    let
+        padding = width - String.length s
+    in
+        if padding <= 0 then
+            s
+
+        else
+            s ++ String.repeat padding " "
+
+
+printEnvHeader : (List String) -> ()
+printEnvHeader envNames =
+    let
+        header = padTo 30 "KEY"
+        cols = List.map (\env -> padTo 12 env) envNames
+        _ = println (header ++ String.join "" cols)
+        _ = println (String.repeat (30 + List.length envNames * 12) "-")
+    in
+        ()
+
+
+printKeyRow : (List (String, Set.Set String)) -> String -> ()
+printKeyRow envKeys key =
+    let
+        padKey = padTo 30 key
+        cols =
+            List.map
+                (\pair ->
+                    if Set.member key (snd pair) then
+                        padTo 12 "OK"
+
+                    else
+                        padTo 12 "MISSING"
+                )
+                envKeys
+        _ = println (padKey ++ String.join "" cols)
+    in
+        ()
+
+
+findMissing : (List (String, Set.Set String)) -> (Set.Set String) -> List (String, String)
+findMissing envKeys allKeys =
+    List.concatMap
+        (\pair ->
+            let
+                env = fst pair
+                keys = snd pair
+                missing = Set.diff allKeys keys
+            in
+                List.map (\k -> ( env, k )) (Set.toList missing)
+        )
+        envKeys
+
+
+printMissing : (String, String) -> ()
+printMissing pair =
+    let
+        env = fst pair
+        key = snd pair
+        _ = println """  {{env}} is missing: {{key}}"""
+    in
+        ()

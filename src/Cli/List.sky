@@ -1,0 +1,65 @@
+module Cli.List exposing (runList)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.List as List
+import Sky.Core.Dict as Dict
+import Std.Log exposing (println)
+import Db.Db as Db
+
+
+runList : () -> ()
+runList _ =
+    case Db.getConn () of
+
+        Err e ->
+            let _ = println ("Database error: " ++ e) in ()
+
+        Ok conn ->
+            case Db.initSchema conn of
+
+                Err e ->
+                    let _ = println ("Schema error: " ++ e) in ()
+
+                Ok _ ->
+                    case Db.listProjects conn of
+
+                        Err e ->
+                            let _ = println ("Error: " ++ e) in ()
+
+                        Ok projects ->
+                            if List.isEmpty projects then
+                                let _ = println "No projects stored yet." in ()
+
+                            else
+                                let _ = List.map (printProject conn) projects in ()
+
+
+printProject : String -> (Dict String String) -> ()
+printProject conn project =
+    let
+        name = Db.getField "name" project
+        id = Db.getField "id" project
+        projectId =
+            case String.toInt id of
+
+                Just n ->
+                    n
+
+                Nothing ->
+                    -1
+        _ = println name
+    in
+        case Db.listEnvs conn projectId of
+
+            Err _ ->
+                ()
+
+            Ok envs ->
+                let
+                    _ =
+                        List.map
+                            (\env -> println ("  - " ++ Db.getField "environment" env))
+                            envs
+                in
+                    ()

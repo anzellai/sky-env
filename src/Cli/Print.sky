@@ -1,0 +1,77 @@
+module Cli.Print exposing (runPrint)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Dict as Dict
+import Sky.Core.List as List
+import Std.Log exposing (println)
+import Lib.Os as Os
+import Env.Encrypt as Encrypt
+import Db.Db as Db
+
+
+runPrint : String -> ()
+runPrint env =
+    let
+        secret = Os.getEnv "SKY_ENV_SECRET"
+    in
+        if String.isEmpty secret then
+            let
+                _ = println "Error: SKY_ENV_SECRET not set."
+                _ = println "Run 'sky-env init' to generate a secret."
+            in
+                ()
+
+        else
+            doPrint secret env
+
+
+doPrint : String -> String -> ()
+doPrint secret env =
+    let
+        project = Os.getProjectName ()
+    in
+        case Db.getConn () of
+
+            Err e ->
+                let _ = println """Database error: {{e}}""" in ()
+
+            Ok conn ->
+                case Db.initSchema conn of
+
+                    Err e ->
+                        let _ = println """Schema error: {{e}}""" in ()
+
+                    Ok _ ->
+                        case Db.ensureProject conn project of
+
+                            Err e ->
+                                let _ = println """Project error: {{e}}""" in ()
+
+                            Ok projectId ->
+                                case Db.getVars conn projectId env of
+
+                                    Err e ->
+                                        let _ = println """Error: {{e}}""" in ()
+
+                                    Ok rows ->
+                                        if List.isEmpty rows then
+                                            let _ = println """No variables found for {{project}}/{{env}}""" in ()
+
+                                        else
+                                            let _ = List.map (printRow secret) rows in ()
+
+
+printRow : String -> (Dict String String) -> ()
+printRow secret row =
+    let
+        key = Db.getField "key" row
+        encValue = Db.getField "value" row
+    in
+        case Encrypt.decrypt secret encValue of
+
+            Ok value ->
+                let _ = println """{{key}}={{value}}""" in ()
+
+            Err msg ->
+                let _ = println """{{key}}=<{{msg}}>""" in ()

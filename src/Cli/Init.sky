@@ -1,0 +1,87 @@
+module Cli.Init exposing (runInit)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Process as Process
+import Std.Log exposing (println)
+import Lib.Os as Os
+
+runInit : () -> ()
+runInit _ =
+    let
+        existing = Os.getEnv "SKY_ENV_SECRET"
+    in
+        if not (String.isEmpty existing) then
+            warnAlreadySet ()
+        
+        else
+            generateSecret ()
+
+
+warnAlreadySet : () -> ()
+warnAlreadySet _ =
+    let
+        _ = println ""
+        _ =
+            println
+                "Warning: SKY_ENV_SECRET is already set in your environment."
+        _ = println ""
+        _ = println "Generating a new secret will make existing encrypted data"
+        _ = println "unreadable. Use 'sky-env list' to check what is stored."
+        _ = println ""
+        _ = println "If you really want a new secret, unset the variable first:"
+        _ = println ""
+        _ = println "  unset SKY_ENV_SECRET"
+        _ = println "  sky-env init"
+        _ = println ""
+    in
+        ()
+
+
+generateSecret : () -> ()
+generateSecret _ =
+    let
+        secret = readRandomHex ()
+    in
+        if String.isEmpty secret then
+            let
+                _ = println "Error: failed to read /dev/urandom."
+                _ = println "Generate a 32-byte hex secret manually and export"
+                _ = println "it as SKY_ENV_SECRET."
+            in
+                ()
+        
+        else
+            printSecret secret
+
+
+readRandomHex : () -> String
+readRandomHex _ =
+    case Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ] of
+        
+        Ok output ->
+            String.trim output
+        
+        Err _ ->
+            ""
+
+
+printSecret : String -> ()
+printSecret secret =
+    let
+        _ = println ""
+        _ = println "Generated sky-env secret (256 bits, hex-encoded):"
+        _ = println ""
+        _ = println ("  " ++ secret)
+        _ = println ""
+        _ = println "Add this to your shell config (~/.bashrc or ~/.zshrc):"
+        _ = println ""
+        _ = println ("  export SKY_ENV_SECRET=\"" ++ secret ++ "\"")
+        _ = println ""
+        _ = println "Then restart your shell or run: source ~/.zshrc"
+        _ = println ""
+        _ = println "Keep this secret safe — losing it means losing access to"
+        _ = println "all encrypted environment variables stored under this key."
+        _ = println ""
+    in
+        ()

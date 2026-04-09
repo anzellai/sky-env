@@ -1,0 +1,35 @@
+module Lib.Os exposing (getEnv, getCwd, getHome, getProjectName)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.Process as Process
+import Sky.Core.Path as Path
+
+
+getEnv : String -> String
+getEnv key =
+    case Process.getEnv key of
+
+        Just value ->
+            value
+
+        Nothing ->
+            ""
+
+
+getCwd : () -> String
+getCwd _ =
+    case Process.getCwd of
+
+        Ok dir ->
+            dir
+
+        Err _ ->
+            ""
+
+
+getHome : () -> String
+getHome _ = getEnv "HOME"
+
+
+getProjectName : () -> String
+getProjectName _ = Path.base (getCwd ())

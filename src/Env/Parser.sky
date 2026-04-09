@@ -1,0 +1,97 @@
+module Env.Parser exposing (parseEnv, serializeEnv)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.List as List
+import Sky.Core.Dict as Dict
+
+
+parseEnv : String -> Dict String String
+parseEnv content =
+    let
+        lines = String.split "\n" content
+        pairs = List.filterMap parseLine lines
+    in
+        Dict.fromList pairs
+
+
+parseLine : String -> Maybe (String, String)
+parseLine line =
+    let
+        trimmed = String.trim line
+    in
+        if String.isEmpty trimmed then
+            Nothing
+
+        else if String.startsWith "#" trimmed then
+            Nothing
+
+        else
+            parseKeyValue trimmed
+
+
+parseKeyValue : String -> Maybe (String, String)
+parseKeyValue line =
+    let
+        eqIdx = findChar "=" line 0
+    in
+        if eqIdx < 0 then
+            Nothing
+
+        else
+            let
+                key = String.trim (String.slice 0 eqIdx line)
+                rawValue = String.trim (String.slice (eqIdx + 1) (String.length line) line)
+                value = stripQuotes rawValue
+            in
+                if String.isEmpty key then
+                    Nothing
+
+                else
+                    Just ( key, value )
+
+
+stripQuotes : String -> String
+stripQuotes s =
+    if String.length s >= 2
+        && String.startsWith "\"" s
+        && String.endsWith "\"" s then
+        String.slice 1 (String.length s - 1) s
+
+    else if String.length s >= 2
+        && String.startsWith "'" s
+        && String.endsWith "'" s then
+        String.slice 1 (String.length s - 1) s
+
+    else
+        s
+
+
+findChar : String -> String -> Int -> Int
+findChar ch s pos =
+    if pos >= String.length s then
+        -1
+
+    else if String.slice pos (pos + 1) s == ch then
+        pos
+
+    else
+        findChar ch s (pos + 1)
+
+
+serializeEnv : Dict String String -> String
+serializeEnv vars =
+    let
+        sorted = List.sort (Dict.toList vars)
+        lines = List.map formatPair sorted
+    in
+        String.join "\n" lines
+
+
+formatPair : (String, String) -> String
+formatPair pair =
+    let
+        k = fst pair
+        v = snd pair
+    in
+        """{{k}}={{v}}"""

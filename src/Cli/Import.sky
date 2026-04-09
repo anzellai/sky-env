@@ -1,0 +1,178 @@
+module Cli.Import exposing (runImport)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Dict as Dict
+import Sky.Core.List as List
+import Sky.Core.File as File
+import Sky.Core.Io as Io
+import Std.Log exposing (println)
+import Lib.Os as Os
+import Env.Parser as Parser
+import Env.Encrypt as Encrypt
+import Db.Db as Db
+
+
+runImport : String -> ()
+runImport env =
+    let
+        secret = Os.getEnv "SKY_ENV_SECRET"
+    in
+        if String.isEmpty secret then
+            let
+                _ = println "Error: SKY_ENV_SECRET not set."
+                _ = println "Run 'sky-env init' to generate a secret."
+            in
+                ()
+
+        else
+            doImport secret env
+
+
+doImport : String -> String -> ()
+doImport secret env =
+    let
+        project = Os.getProjectName ()
+    in
+        case loadEnvFile env of
+
+            Err msg ->
+                let _ = println ("Error: " ++ msg) in ()
+
+            Ok content ->
+                importContent secret project env content
+
+
+importContent : String -> String -> String -> String -> ()
+importContent secret project env content =
+    let
+        vars = Parser.parseEnv content
+        encryptResult = encryptAll secret (Dict.toList vars) []
+    in
+        case encryptResult of
+
+            Err e ->
+                let _ = println ("Encrypt error: " ++ e) in ()
+
+            Ok encryptedPairs ->
+                writeToDb project env (Dict.fromList encryptedPairs)
+
+
+encryptAll : String -> (List (String, String)) -> (List (String, String)) -> Result String (List (String, String))
+encryptAll secret pairs acc =
+    case pairs of
+
+        [] ->
+            Ok (List.reverse acc)
+
+        pair :: rest ->
+            case Encrypt.encrypt secret (snd pair) of
+
+                Err e ->
+                    Err e
+
+                Ok ciphertext ->
+                    encryptAll secret rest (( fst pair , ciphertext ) :: acc)
+
+
+writeToDb : String -> String -> (Dict String String) -> ()
+writeToDb project env encrypted =
+    case Db.getConn () of
+
+        Err e ->
+            let _ = println ("Database error: " ++ e) in ()
+
+        Ok conn ->
+            case Db.initSchema conn of
+
+                Err e ->
+                    let _ = println ("Schema error: " ++ e) in ()
+
+                Ok _ ->
+                    case Db.ensureProject conn project of
+
+                        Err e ->
+                            let _ = println ("Project error: " ++ e) in ()
+
+                        Ok projectId ->
+                            case Db.importVars conn projectId env encrypted of
+
+                                Err e ->
+                                    let _ = println ("Import error: " ++ e) in ()
+
+                                Ok count ->
+                                    let
+                                        countStr = String.fromInt count
+                                        _ = println ("Imported " ++ countStr ++ " variables into " ++ project ++ "/" ++ env)
+                                    in
+                                        ()
+
+
+loadEnvFile : String -> Result String String
+loadEnvFile env =
+    case File.readFile (".env." ++ env) of
+
+        Ok content ->
+            Ok content
+
+        Err _ ->
+            loadFallback env
+
+
+loadFallback : String -> Result String String
+loadFallback env =
+    case File.readFile ".env" of
+
+        Ok content ->
+            Ok content
+
+        Err _ ->
+            loadExample env
+
+
+loadExample : String -> Result String String
+loadExample env =
+    case File.readFile ".env.example" of
+
+        Ok content ->
+            Ok (promptFromExample content)
+
+        Err _ ->
+            Err ("No .env." ++ env ++ ", .env, or .env.example found")
+
+
+promptFromExample : String -> String
+promptFromExample content =
+    let
+        vars = Parser.parseEnv content
+        keys = List.sort (Dict.keys vars)
+        _ = println "Using .env.example as template:"
+        _ = println ""
+        filled = List.map promptForKey keys
+    in
+        String.join "\n" (List.map formatPair filled)
+
+
+formatPair : (String, String) -> String
+formatPair pair =
+    let
+        k = fst pair
+        v = snd pair
+    in
+        k ++ "=" ++ v
+
+
+promptForKey : String -> (String, String)
+promptForKey key =
+    let
+        _ = Io.writeStdout ("  Enter value for " ++ key ++ ": ")
+        value =
+            case Io.readLine () of
+
+                Just v ->
+                    String.trim v
+
+                Nothing ->
+                    ""
+    in
+        ( key , value )

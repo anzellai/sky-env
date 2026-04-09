@@ -1,0 +1,169 @@
+module Db.Db exposing (getConn, initSchema, ensureProject, importVars, setVar, getVars, listProjects, listEnvs, getField)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.List as List
+import Sky.Core.Dict as Dict
+import Sky.Core.File as File
+import Sky.Core.Path as Path
+import Std.Db as Db
+import Lib.Os as Os
+
+
+getConn : () -> Result String String
+getConn _ =
+    let
+        home = Os.getHome ()
+    in
+        if String.isEmpty home then
+            Err "HOME environment variable not set"
+
+        else
+            let
+                dir = Path.join [ home , ".local" , "sky-env" ]
+                _ = File.mkdirAll dir
+                dbPath = Path.join [ dir , "skyenv.db" ]
+            in
+                Db.open "sqlite" dbPath
+
+
+initSchema : String -> Result String ()
+initSchema conn =
+    let
+        r1 =
+            Db.execRaw conn
+                """CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )"""
+        r2 =
+            Db.execRaw conn
+                """CREATE TABLE IF NOT EXISTS env_vars (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    environment TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    UNIQUE(project_id, environment, key)
+                )"""
+    in
+        case r1 of
+
+            Err e ->
+                Err """Failed to create projects table: {{errorToString e}}"""
+
+            Ok _ ->
+                case r2 of
+
+                    Err e ->
+                        Err """Failed to create env_vars table: {{errorToString e}}"""
+
+                    Ok _ ->
+                        Ok ()
+
+
+ensureProject : String -> String -> Result String Int
+ensureProject conn name =
+    let
+        _ =
+            Db.exec conn
+                "INSERT OR IGNORE INTO projects (name) VALUES (?)"
+                [ name ]
+        rows =
+            Db.query conn
+                "SELECT id FROM projects WHERE name = ? LIMIT 1"
+                [ name ]
+    in
+        case rows of
+
+            Ok r ->
+                case List.head r of
+
+                    Just row ->
+                        Ok (Db.getInt "id" row)
+
+                    Nothing ->
+                        Err """Failed to find project: {{name}}"""
+
+            Err e ->
+                Err """Failed to query project: {{errorToString e}}"""
+
+
+importVars : String -> Int -> String -> (Dict String String) -> Result String Int
+importVars conn projectId env vars =
+    let
+        delResult =
+            Db.exec conn
+                "DELETE FROM env_vars WHERE project_id = ? AND environment = ?"
+                [ String.fromInt projectId , env ]
+    in
+        case delResult of
+
+            Err e ->
+                Err """Failed to clear existing vars: {{errorToString e}}"""
+
+            Ok _ ->
+                let
+                    pairs = Dict.toList vars
+                    _ = List.map (\pair -> insertVar conn projectId env (fst pair) (snd pair)) pairs
+                in
+                    Ok (List.length pairs)
+
+
+insertVar : String -> Int -> String -> String -> String -> Result String ()
+insertVar conn projectId env key value =
+    case Db.exec conn "INSERT INTO env_vars (project_id, environment, key, value) VALUES (?, ?, ?, ?)" [ String.fromInt projectId , env , key , value ] of
+
+        Ok _ ->
+            Ok ()
+
+        Err e ->
+            Err """Failed to insert {{key}}: {{errorToString e}}"""
+
+
+setVar : String -> Int -> String -> String -> String -> Result String ()
+setVar conn projectId env key value =
+    let
+        _ =
+            Db.exec conn
+                "DELETE FROM env_vars WHERE project_id = ? AND environment = ? AND key = ?"
+                [ String.fromInt projectId , env , key ]
+    in
+        insertVar conn projectId env key value
+
+
+getVars : String -> Int -> String -> Result String (List (Dict String String))
+getVars conn projectId env =
+    case Db.query conn "SELECT key, value FROM env_vars WHERE project_id = ? AND environment = ? ORDER BY key" [ String.fromInt projectId , env ] of
+
+        Ok rows ->
+            Ok rows
+
+        Err e ->
+            Err """Failed to query vars: {{errorToString e}}"""
+
+
+listProjects : String -> Result String (List (Dict String String))
+listProjects conn =
+    case Db.query conn "SELECT id, name FROM projects ORDER BY name" [] of
+
+        Ok rows ->
+            Ok rows
+
+        Err e ->
+            Err """Failed to list projects: {{errorToString e}}"""
+
+
+listEnvs : String -> Int -> Result String (List (Dict String String))
+listEnvs conn projectId =
+    case Db.query conn "SELECT DISTINCT environment FROM env_vars WHERE project_id = ? ORDER BY environment" [ String.fromInt projectId ] of
+
+        Ok rows ->
+            Ok rows
+
+        Err e ->
+            Err """Failed to list environments: {{errorToString e}}"""
+
+
+getField : String -> (Dict String String) -> String
+getField field row = Db.getField field row

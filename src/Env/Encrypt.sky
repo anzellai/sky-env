@@ -1,0 +1,110 @@
+module Env.Encrypt exposing (encrypt, decrypt)
+
+import Sky.Core.Prelude exposing (..)
+import Sky.Core.String as String
+import Sky.Core.Process as Process
+import Sky.Core.File as File
+
+
+-- AES-256-CBC encryption via openssl with PBKDF2 key derivation.
+--
+-- The plaintext is written to a short-lived temp file, openssl reads
+-- it, the ciphertext is captured from stdout, and the temp file is
+-- removed immediately. The secret is passed via the inherited
+-- SKY_ENV_SECRET environment variable, never on the command line.
+--
+-- The output is base64-encoded so it round-trips through SQLite TEXT
+-- columns. Each call generates a fresh random salt (embedded in the
+-- output), so encrypting the same value twice produces different
+-- ciphertexts.
+
+
+encrypt : String -> String -> Result String String
+encrypt _ plaintext =
+    case writeTemp plaintext of
+
+        Err e ->
+            Err e
+
+        Ok tmpPath ->
+            let
+                result = runOpenssl encryptArgs tmpPath
+                _ = File.remove tmpPath
+            in
+                result
+
+
+decrypt : String -> String -> Result String String
+decrypt _ ciphertext =
+    case writeTemp ciphertext of
+
+        Err e ->
+            Err e
+
+        Ok tmpPath ->
+            let
+                result = runOpenssl decryptArgs tmpPath
+                _ = File.remove tmpPath
+            in
+                result
+
+
+encryptArgs : List String
+encryptArgs =
+    [ "enc"
+    , "-aes-256-cbc"
+    , "-pbkdf2"
+    , "-iter"
+    , "100000"
+    , "-salt"
+    , "-base64"
+    , "-A"
+    , "-pass"
+    , "env:SKY_ENV_SECRET"
+    ]
+
+
+decryptArgs : List String
+decryptArgs =
+    [ "enc"
+    , "-aes-256-cbc"
+    , "-pbkdf2"
+    , "-iter"
+    , "100000"
+    , "-d"
+    , "-base64"
+    , "-A"
+    , "-pass"
+    , "env:SKY_ENV_SECRET"
+    ]
+
+
+runOpenssl : (List String) -> String -> Result String String
+runOpenssl baseArgs tmpPath =
+    let
+        args = baseArgs ++ [ "-in" , tmpPath ]
+    in
+        case Process.run "openssl" args of
+
+            Ok output ->
+                Ok (String.trim output)
+
+            Err _ ->
+                Err "openssl failed (wrong secret or openssl not installed)"
+
+
+writeTemp : String -> Result String String
+writeTemp content =
+    case File.tempFile "sky-env-" of
+
+        Err e ->
+            Err ("temp file: " ++ e)
+
+        Ok tmpPath ->
+            case File.writeFile tmpPath content of
+
+                Err e ->
+                    Err ("write temp: " ++ e)
+
+                Ok _ ->
+                    Ok tmpPath

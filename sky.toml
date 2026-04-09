@@ -1,0 +1,11 @@
+name = "sky-env"
+version = "0.1.0"
+entry = "src/Main.sky"
+bin = "sky-out/sky-env"
+
+[source]
+root = "src"
+
+["go.dependencies"]
+"database/sql" = "latest"
+"modernc.org/sqlite" = "latest"
