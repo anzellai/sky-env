@@ -24,10 +24,9 @@ jobs:
         with:
           go-version: '1.26'
 
-      - name: Install sky compiler
+      - name: Install sky compiler + companion tools
         run: |
-          curl -fsSL https://github.com/anzellai/sky/releases/latest/download/sky-linux-x64 -o /usr/local/bin/sky
-          chmod +x /usr/local/bin/sky
+          curl -fsSL https://raw.githubusercontent.com/anzellai/sky/main/install.sh | sudo sh
           sky --version
 
       - name: Compile sky-env to Go source
