@@ -181,6 +181,50 @@ internal-tool
   - dev
 ```
 
+### 7. Rotate the encryption secret
+
+When you need to swap to a new secret (a teammate leaves, the old one was on a machine you no longer trust, scheduled rotation), one command does the whole thing:
+
+```bash
+$ sky-env rotate
+
+WARNING: this will rotate the encryption secret.
+
+It will:
+  1. Back up the database file
+  2. Generate a new 256-bit secret
+  3. Decrypt every stored variable with the current secret
+  4. Re-encrypt them with the new secret and write back
+
+After rotation you MUST update SKY_ENV_SECRET in your shell
+config and reload before running any other sky-env command.
+The old secret will no longer decrypt the data.
+
+Type 'rotate' to confirm: rotate
+
+Database backed up to:
+  ~/.local/sky-env/skyenv.db.bak.20260409-181237
+
+Re-encrypted 26 variable(s).
+
+NEW SECRET (save this NOW — it will not be shown again):
+
+  068a0a3091e2f11cc8f532a7be085203323c4606903cb92c35b5744a8a7643c9
+
+Update your shell config (~/.bashrc or ~/.zshrc):
+
+  export SKY_ENV_SECRET="068a0a3091e2f11cc8f532a7be085203323c4606903cb92c35b5744a8a7643c9"
+```
+
+The rotation is **transactionally safe**:
+
+1. The database file is copied to a timestamped `.bak.YYYYMMDD-HHMMSS` backup before anything is touched.
+2. Every record is decrypted with the current secret and re-encrypted with the new secret **in memory**. If any single value fails to decrypt or re-encrypt, the rotation aborts and the database is left untouched.
+3. Only after every record is validated does sky-env write the new ciphertexts back.
+4. If a write fails mid-way, sky-env prints the exact `cp` command to restore from the backup.
+
+You must type the literal word `rotate` to confirm — anything else cancels with no changes. After a successful rotation, update `SKY_ENV_SECRET` in your shell config and reload before running any other sky-env command.
+
 ---
 
 ## Encryption model
@@ -283,11 +327,11 @@ The intended workflow:
 6. **Everyone runs `sky-env print dev`** to see the latest values.
 
 When someone leaves the team, rotate the secret:
-1. `sky-env print dev > .env.dev.tmp` (and similar for all envs) — using the OLD secret
-2. Pick a new secret and update `SKY_ENV_SECRET` everywhere
-3. `sky-env import dev` (and similar) — re-encrypts under the new secret
-4. Delete the temporary `.env.*.tmp` files
-5. Commit the rotated database
+1. Run `sky-env rotate` — confirm with `rotate`, and sky-env will back up the database, re-encrypt every value under a fresh 256-bit secret, and print the new secret
+2. Update `SKY_ENV_SECRET` in your shell config to the new value and reload
+3. Share the new secret with remaining teammates via your secure channel
+4. Commit the rotated database
+5. Once everyone has updated, delete the `~/.local/sky-env/skyenv.db.bak.*` backup
 
 ---
 
@@ -300,6 +344,7 @@ sky-env print <env>        Decrypt and print all variables for <env>
 sky-env set <env> <key>    Set a single variable (prompts for value via stdin)
 sky-env list               List all stored projects and their environments
 sky-env diff               Compare environments for the current project, show missing keys
+sky-env rotate             Rotate the encryption secret (re-encrypts every value, with backup)
 ```
 
 The "current project" is always the basename of the working directory. You can manage multiple projects by `cd`-ing between them.
@@ -336,6 +381,6 @@ If you want to add a feature, please open an issue first to discuss. Things on t
 - [ ] `sky-env export <env> > file` — explicit export to a file (currently you pipe `print`)
 - [ ] `sky-env unset <env> <key>` — remove a single variable
 - [ ] `sky-env rename <old> <new>` — rename an environment
-- [ ] `sky-env rotate` — re-encrypt all values under a new secret in one command
+- [x] `sky-env rotate` — re-encrypt all values under a new secret in one command
 - [ ] Per-project secrets (different secret per project)
 - [ ] Native AES via Sky stdlib (currently shells out to openssl)

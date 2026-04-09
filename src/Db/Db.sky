@@ -1,4 +1,4 @@
-module Db.Db exposing (getConn, initSchema, ensureProject, importVars, setVar, getVars, listProjects, listEnvs, getField)
+module Db.Db exposing (getConn, getDbPath, initSchema, ensureProject, importVars, setVar, getVars, listProjects, listEnvs, getField)
 
 import Sky.Core.Prelude exposing (..)
 import Sky.Core.String as String
@@ -25,6 +25,18 @@ getConn _ =
                 dbPath = Path.join [ dir , "skyenv.db" ]
             in
                 Db.open "sqlite" dbPath
+
+
+getDbPath : () -> Result String String
+getDbPath _ =
+    let
+        home = Os.getHome ()
+    in
+        if String.isEmpty home then
+            Err "HOME environment variable not set"
+
+        else
+            Ok (Path.join [ home , ".local" , "sky-env" , "skyenv.db" ])
 
 
 initSchema : String -> Result String ()

@@ -1,4 +1,4 @@
-module Env.Encrypt exposing (encrypt, decrypt)
+module Env.Encrypt exposing (encrypt, decrypt, encryptWithKey, decryptWithKey)
 
 import Sky.Core.Prelude exposing (..)
 import Sky.Core.String as String
@@ -47,6 +47,93 @@ decrypt _ ciphertext =
                 _ = File.remove tmpPath
             in
                 result
+
+
+-- Same as encrypt/decrypt but reads the password from a private temp
+-- file instead of $SKY_ENV_SECRET. Used by `sky-env rotate` so that
+-- the old key (in the env var) can decrypt while the new key encrypts
+-- without ever shelling out to a process with a different env.
+
+
+encryptWithKey : String -> String -> Result String String
+encryptWithKey key plaintext =
+    runWithKey key encryptArgsForKey plaintext
+
+
+decryptWithKey : String -> String -> Result String String
+decryptWithKey key ciphertext =
+    runWithKey key decryptArgsForKey ciphertext
+
+
+runWithKey : String -> (String -> List String) -> String -> Result String String
+runWithKey key argsFor content =
+    case writeKeyFile key of
+
+        Err e ->
+            Err e
+
+        Ok keyPath ->
+            case writeTemp content of
+
+                Err e ->
+                    let _ = File.remove keyPath in
+                    Err e
+
+                Ok tmpPath ->
+                    let
+                        result = runOpenssl (argsFor keyPath) tmpPath
+                        _ = File.remove tmpPath
+                        _ = File.remove keyPath
+                    in
+                        result
+
+
+writeKeyFile : String -> Result String String
+writeKeyFile key =
+    case File.tempFile "sky-env-key-" of
+
+        Err e ->
+            Err ("key temp: " ++ e)
+
+        Ok keyPath ->
+            case File.writeFile keyPath key of
+
+                Err e ->
+                    let _ = File.remove keyPath in
+                    Err ("write key: " ++ e)
+
+                Ok _ ->
+                    Ok keyPath
+
+
+encryptArgsForKey : String -> List String
+encryptArgsForKey keyPath =
+    [ "enc"
+    , "-aes-256-cbc"
+    , "-pbkdf2"
+    , "-iter"
+    , "100000"
+    , "-salt"
+    , "-base64"
+    , "-A"
+    , "-pass"
+    , "file:" ++ keyPath
+    ]
+
+
+decryptArgsForKey : String -> List String
+decryptArgsForKey keyPath =
+    [ "enc"
+    , "-aes-256-cbc"
+    , "-pbkdf2"
+    , "-iter"
+    , "100000"
+    , "-d"
+    , "-base64"
+    , "-A"
+    , "-pass"
+    , "file:" ++ keyPath
+    ]
 
 
 encryptArgs : List String

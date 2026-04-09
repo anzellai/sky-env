@@ -10,6 +10,7 @@ import Cli.Print as Print
 import Cli.Set as Set
 import Cli.List as List_
 import Cli.Diff as Diff
+import Cli.Rotate as Rotate
 import Modernc.Org.Sqlite as _
 
 
@@ -59,6 +60,9 @@ dispatch command =
     else if command == "diff" then
         Diff.runDiff ()
 
+    else if command == "rotate" then
+        Rotate.runRotate ()
+
     else
         printHelp ()
 
@@ -92,6 +96,7 @@ printHelp _ =
         _ = println "  sky-env set <env> <key>    Set a variable (prompts for value)"
         _ = println "  sky-env list               List all projects and environments"
         _ = println "  sky-env diff               Compare keys across all environments"
+        _ = println "  sky-env rotate             Rotate the encryption secret (re-encrypts all data)"
         _ = println ""
         _ = println "Examples:"
         _ = println "  sky-env init"
