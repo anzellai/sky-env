@@ -3,6 +3,7 @@ module Cli.Init exposing (runInit)
 import Sky.Core.Prelude exposing (..)
 import Sky.Core.String as String
 import Sky.Core.Process as Process
+import Sky.Core.Task as Task
 import Std.Log exposing (println)
 import Lib.Os as Os
 
@@ -57,11 +58,11 @@ generateSecret _ =
 
 readRandomHex : () -> String
 readRandomHex _ =
-    case Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ] of
-        
+    case Task.run (Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
+
         Ok output ->
             String.trim output
-        
+
         Err _ ->
             ""
 

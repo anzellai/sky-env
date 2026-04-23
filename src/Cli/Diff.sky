@@ -36,7 +36,6 @@ runDiff _ =
                                 doDiff conn projectId project
 
 
-doDiff : String -> Int -> String -> ()
 doDiff conn projectId project =
     case Db.listEnvs conn projectId of
 
@@ -81,7 +80,6 @@ doDiff conn projectId project =
                                 ()
 
 
-getKeysForEnv : String -> Int -> String -> Set.Set String
 getKeysForEnv conn projectId env =
     case Db.getVars conn projectId env of
 

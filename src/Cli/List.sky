@@ -35,7 +35,6 @@ runList _ =
                                 let _ = List.map (printProject conn) projects in ()
 
 
-printProject : String -> (Dict String String) -> ()
 printProject conn project =
     let
         name = Db.getField "name" project

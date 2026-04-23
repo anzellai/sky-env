@@ -5,6 +5,7 @@ import Sky.Core.String as String
 import Sky.Core.Dict as Dict
 import Sky.Core.List as List
 import Sky.Core.File as File
+import Sky.Core.Task as Task
 import Sky.Core.Io as Io
 import Std.Log exposing (println)
 import Lib.Os as Os
@@ -110,7 +111,7 @@ writeToDb project env encrypted =
 
 loadEnvFile : String -> Result String String
 loadEnvFile env =
-    case File.readFile (".env." ++ env) of
+    case Task.run (File.readFile (".env." ++ env)) of
 
         Ok content ->
             Ok content
@@ -121,7 +122,7 @@ loadEnvFile env =
 
 loadFallback : String -> Result String String
 loadFallback env =
-    case File.readFile ".env" of
+    case Task.run (File.readFile ".env") of
 
         Ok content ->
             Ok content
@@ -132,7 +133,7 @@ loadFallback env =
 
 loadExample : String -> Result String String
 loadExample env =
-    case File.readFile ".env.example" of
+    case Task.run (File.readFile ".env.example") of
 
         Ok content ->
             Ok (promptFromExample content)

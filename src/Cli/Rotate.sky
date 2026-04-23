@@ -6,6 +6,7 @@ import Sky.Core.List as List
 import Sky.Core.Dict as Dict
 import Sky.Core.File as File
 import Sky.Core.Process as Process
+import Sky.Core.Task as Task
 import Sky.Core.Io as Io
 import Std.Log exposing (println)
 import Lib.Os as Os
@@ -92,11 +93,11 @@ startRotation oldSecret =
 
 generateSecret : () -> String
 generateSecret _ =
-    case Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ] of
-        
+    case Task.run (Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
+
         Ok output ->
             String.trim output
-        
+
         Err _ ->
             ""
 
@@ -112,7 +113,7 @@ withBackup oldSecret newSecret =
                 ()
         
         Ok dbPath ->
-            if not (File.exists dbPath) then
+            if not (Task.run (File.exists dbPath) |> Result.withDefault False) then
                 let
                     _ = println ("Database file not found: " ++ dbPath)
                     _ = println "Nothing to rotate."
@@ -144,22 +145,22 @@ backupDb dbPath =
         ts = timestamp ()
         backupPath = dbPath ++ ".bak." ++ ts
     in
-        case File.copy dbPath backupPath of
-            
+        case Task.run (File.copy dbPath backupPath) of
+
             Ok _ ->
                 Ok backupPath
-            
+
             Err e ->
                 Err ("copy: " ++ errorToString e)
 
 
 timestamp : () -> String
 timestamp _ =
-    case Process.run "date" [ "+%Y%m%d-%H%M%S" ] of
-        
+    case Task.run (Process.run "date" [ "+%Y%m%d-%H%M%S" ]) of
+
         Ok output ->
             String.trim output
-        
+
         Err _ ->
             "bak"
 
@@ -213,7 +214,6 @@ doRotation oldSecret newSecret backupPath =
                                 writeAll conn newSecret rotations backupPath
 
 
-collectAll : String -> String -> String -> Result String (List Rotation)
 collectAll conn oldSecret newSecret =
     case Db.listProjects conn of
         
@@ -224,7 +224,6 @@ collectAll conn oldSecret newSecret =
             walkProjects conn oldSecret newSecret projects []
 
 
-walkProjects : String -> String -> String -> (List (Dict String String)) -> (List Rotation) -> Result String (List Rotation)
 walkProjects conn oldSecret newSecret projects acc =
     case projects of
         
@@ -260,7 +259,6 @@ parseProjectId project =
             -1
 
 
-walkEnvs : String -> String -> String -> Int -> (List Rotation) -> Result String (List Rotation)
 walkEnvs conn oldSecret newSecret projectId acc =
     case Db.listEnvs conn projectId of
         
@@ -274,7 +272,6 @@ walkEnvs conn oldSecret newSecret projectId acc =
                 walkEnvNames conn oldSecret newSecret projectId envNames acc
 
 
-walkEnvNames : String -> String -> String -> Int -> (List String) -> (List Rotation) -> Result String (List Rotation)
 walkEnvNames conn oldSecret newSecret projectId envs acc =
     case envs of
         
@@ -291,7 +288,6 @@ walkEnvNames conn oldSecret newSecret projectId envs acc =
                     walkEnvNames conn oldSecret newSecret projectId rest newAcc
 
 
-walkVars : String -> String -> String -> Int -> String -> (List Rotation) -> Result String (List Rotation)
 walkVars conn oldSecret newSecret projectId env acc =
     case Db.getVars conn projectId env of
         
@@ -343,7 +339,6 @@ rotateRows oldSecret newSecret projectId env rows acc =
                                         (rotation :: acc)
 
 
-writeAll : String -> String -> (List Rotation) -> String -> ()
 writeAll conn newSecret rotations backupPath =
     case writeRotations conn rotations 0 of
         
@@ -368,7 +363,6 @@ writeAll conn newSecret rotations backupPath =
             printSuccess newSecret count backupPath
 
 
-writeRotations : String -> (List Rotation) -> Int -> Result String Int
 writeRotations conn rotations count =
     case rotations of
         

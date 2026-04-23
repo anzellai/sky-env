@@ -1,7 +1,7 @@
 name = "sky-env"
 version = "0.1.1"
 entry = "src/Main.sky"
-bin = "sky-out/sky-env"
+bin = "sky-env"
 
 [source]
 root = "src"

@@ -4,6 +4,7 @@ import Sky.Core.Prelude exposing (..)
 import Sky.Core.String as String
 import Sky.Core.Process as Process
 import Sky.Core.File as File
+import Sky.Core.Task as Task
 
 
 -- AES-256-CBC encryption via openssl with PBKDF2 key derivation.
@@ -29,7 +30,7 @@ encrypt _ plaintext =
         Ok tmpPath ->
             let
                 result = runOpenssl encryptArgs tmpPath
-                _ = File.remove tmpPath
+                _ = Task.run (File.remove tmpPath)
             in
                 result
 
@@ -44,7 +45,7 @@ decrypt _ ciphertext =
         Ok tmpPath ->
             let
                 result = runOpenssl decryptArgs tmpPath
-                _ = File.remove tmpPath
+                _ = Task.run (File.remove tmpPath)
             in
                 result
 
@@ -81,31 +82,31 @@ runWithKey key argsFor content =
             case writeTemp content of
 
                 Err e ->
-                    let _ = File.remove keyPath in
+                    let _ = Task.run (File.remove keyPath) in
                     Err e
 
                 Ok tmpPath ->
                     let
                         result = runOpenssl (argsFor keyPath) tmpPath
-                        _ = File.remove tmpPath
-                        _ = File.remove keyPath
+                        _ = Task.run (File.remove tmpPath)
+                        _ = Task.run (File.remove keyPath)
                     in
                         result
 
 
 writeKeyFile : String -> Result String String
 writeKeyFile key =
-    case File.tempFile "sky-env-key-" of
+    case Task.run (File.tempFile "sky-env-key-") of
 
         Err e ->
-            Err ("key temp: " ++ e)
+            Err ("key temp: " ++ errorToString e)
 
         Ok keyPath ->
-            case File.writeFile keyPath key of
+            case Task.run (File.writeFile keyPath key) of
 
                 Err e ->
-                    let _ = File.remove keyPath in
-                    Err ("write key: " ++ e)
+                    let _ = Task.run (File.remove keyPath) in
+                    Err ("write key: " ++ errorToString e)
 
                 Ok _ ->
                     Ok keyPath
@@ -176,7 +177,7 @@ runOpenssl baseArgs tmpPath =
     let
         args = baseArgs ++ [ "-in" , tmpPath ]
     in
-        case Process.run "openssl" args of
+        case Task.run (Process.run "openssl" args) of
 
             Ok output ->
                 Ok (String.trim output)
@@ -187,16 +188,16 @@ runOpenssl baseArgs tmpPath =
 
 writeTemp : String -> Result String String
 writeTemp content =
-    case File.tempFile "sky-env-" of
+    case Task.run (File.tempFile "sky-env-") of
 
         Err e ->
-            Err ("temp file: " ++ e)
+            Err ("temp file: " ++ errorToString e)
 
         Ok tmpPath ->
-            case File.writeFile tmpPath content of
+            case Task.run (File.writeFile tmpPath content) of
 
                 Err e ->
-                    Err ("write temp: " ++ e)
+                    Err ("write temp: " ++ errorToString e)
 
                 Ok _ ->
                     Ok tmpPath
