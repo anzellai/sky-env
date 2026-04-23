@@ -1,16 +1,32 @@
 module Db.Db exposing (getConn, getDbPath, initSchema, ensureProject, importVars, setVar, getVars, listProjects, listEnvs, getField)
 
+-- DB layer for sky-env. Sky compiler v0.9.6 effect-boundary audit
+-- migrated Std.Db.* from Result Error a to Task Error a (real I/O
+-- composes via Cmd.perform / Task.run goroutines instead of running
+-- inline). Sky-env is a CLI tool — no Sky.Live, so the Lib-bridge
+-- approach is fine: each wrapper forces with Task.run inside and
+-- exposes a Result API to the Cli/* call sites.
+--
+-- The previous version annotated `conn : String` but the runtime was
+-- actually a *SkyDb opaque handle. The typed-codegen path silently
+-- accepted this annotation mismatch (wrong type, runtime ran via
+-- the any-typed dispatch). With the audit landed, annotations are
+-- load-bearing and the code-gen wraps SkyTask param boundaries via
+-- TaskCoerceT — which surfaces the mismatch as a clear runtime
+-- panic. Annotations dropped here so HM infers the proper Db type
+-- from the body and propagates it through callers.
+
 import Sky.Core.Prelude exposing (..)
 import Sky.Core.String as String
 import Sky.Core.List as List
 import Sky.Core.Dict as Dict
 import Sky.Core.File as File
 import Sky.Core.Path as Path
+import Sky.Core.Task as Task
 import Std.Db as Db
 import Lib.Os as Os
 
 
-getConn : () -> Result String String
 getConn _ =
     let
         home = Os.getHome ()
@@ -21,13 +37,17 @@ getConn _ =
         else
             let
                 dir = Path.join [ home , ".local" , "sky-env" ]
-                _ = File.mkdirAll dir
+                _ = Task.run (File.mkdirAll dir)
                 dbPath = Path.join [ dir , "skyenv.db" ]
             in
-                Db.open "sqlite" dbPath
+                case Task.run (Db.open "sqlite" dbPath) of
+                    Ok conn ->
+                        Ok conn
+
+                    Err e ->
+                        Err (errorToString e)
 
 
-getDbPath : () -> Result String String
 getDbPath _ =
     let
         home = Os.getHome ()
@@ -39,52 +59,54 @@ getDbPath _ =
             Ok (Path.join [ home , ".local" , "sky-env" , "skyenv.db" ])
 
 
-initSchema : String -> Result String ()
 initSchema conn =
     let
         r1 =
-            Db.execRaw conn
-                """CREATE TABLE IF NOT EXISTS projects (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE
-                )"""
+            Task.run
+                (Db.execRaw conn
+                    """CREATE TABLE IF NOT EXISTS projects (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE
+                    )""")
         r2 =
-            Db.execRaw conn
-                """CREATE TABLE IF NOT EXISTS env_vars (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER NOT NULL,
-                    environment TEXT NOT NULL,
-                    key TEXT NOT NULL,
-                    value TEXT NOT NULL,
-                    UNIQUE(project_id, environment, key)
-                )"""
+            Task.run
+                (Db.execRaw conn
+                    """CREATE TABLE IF NOT EXISTS env_vars (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        project_id INTEGER NOT NULL,
+                        environment TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        UNIQUE(project_id, environment, key)
+                    )""")
     in
         case r1 of
 
             Err e ->
-                Err """Failed to create projects table: {{errorToString e}}"""
+                Err ("Failed to create projects table: " ++ errorToString e)
 
             Ok _ ->
                 case r2 of
 
                     Err e ->
-                        Err """Failed to create env_vars table: {{errorToString e}}"""
+                        Err ("Failed to create env_vars table: " ++ errorToString e)
 
                     Ok _ ->
                         Ok ()
 
 
-ensureProject : String -> String -> Result String Int
 ensureProject conn name =
     let
         _ =
-            Db.exec conn
-                "INSERT OR IGNORE INTO projects (name) VALUES (?)"
-                [ name ]
+            Task.run
+                (Db.exec conn
+                    "INSERT OR IGNORE INTO projects (name) VALUES (?)"
+                    [ name ])
         rows =
-            Db.query conn
-                "SELECT id FROM projects WHERE name = ? LIMIT 1"
-                [ name ]
+            Task.run
+                (Db.query conn
+                    "SELECT id FROM projects WHERE name = ? LIMIT 1"
+                    [ name ])
     in
         case rows of
 
@@ -95,24 +117,24 @@ ensureProject conn name =
                         Ok (Db.getInt "id" row)
 
                     Nothing ->
-                        Err """Failed to find project: {{name}}"""
+                        Err ("Failed to find project: " ++ name)
 
             Err e ->
-                Err """Failed to query project: {{errorToString e}}"""
+                Err ("Failed to query project: " ++ errorToString e)
 
 
-importVars : String -> Int -> String -> (Dict String String) -> Result String Int
 importVars conn projectId env vars =
     let
         delResult =
-            Db.exec conn
-                "DELETE FROM env_vars WHERE project_id = ? AND environment = ?"
-                [ String.fromInt projectId , env ]
+            Task.run
+                (Db.exec conn
+                    "DELETE FROM env_vars WHERE project_id = ? AND environment = ?"
+                    [ String.fromInt projectId , env ])
     in
         case delResult of
 
             Err e ->
-                Err """Failed to clear existing vars: {{errorToString e}}"""
+                Err ("Failed to clear existing vars: " ++ errorToString e)
 
             Ok _ ->
                 let
@@ -122,60 +144,65 @@ importVars conn projectId env vars =
                     Ok (List.length pairs)
 
 
-insertVar : String -> Int -> String -> String -> String -> Result String ()
 insertVar conn projectId env key value =
-    case Db.exec conn "INSERT INTO env_vars (project_id, environment, key, value) VALUES (?, ?, ?, ?)" [ String.fromInt projectId , env , key , value ] of
+    case Task.run
+            (Db.exec conn
+                "INSERT INTO env_vars (project_id, environment, key, value) VALUES (?, ?, ?, ?)"
+                [ String.fromInt projectId , env , key , value ]) of
 
         Ok _ ->
             Ok ()
 
         Err e ->
-            Err """Failed to insert {{key}}: {{errorToString e}}"""
+            Err ("Failed to insert " ++ key ++ ": " ++ errorToString e)
 
 
-setVar : String -> Int -> String -> String -> String -> Result String ()
 setVar conn projectId env key value =
     let
         _ =
-            Db.exec conn
-                "DELETE FROM env_vars WHERE project_id = ? AND environment = ? AND key = ?"
-                [ String.fromInt projectId , env , key ]
+            Task.run
+                (Db.exec conn
+                    "DELETE FROM env_vars WHERE project_id = ? AND environment = ? AND key = ?"
+                    [ String.fromInt projectId , env , key ])
     in
         insertVar conn projectId env key value
 
 
-getVars : String -> Int -> String -> Result String (List (Dict String String))
 getVars conn projectId env =
-    case Db.query conn "SELECT key, value FROM env_vars WHERE project_id = ? AND environment = ? ORDER BY key" [ String.fromInt projectId , env ] of
+    case Task.run
+            (Db.query conn
+                "SELECT key, value FROM env_vars WHERE project_id = ? AND environment = ? ORDER BY key"
+                [ String.fromInt projectId , env ]) of
 
         Ok rows ->
             Ok rows
 
         Err e ->
-            Err """Failed to query vars: {{errorToString e}}"""
+            Err ("Failed to query vars: " ++ errorToString e)
 
 
-listProjects : String -> Result String (List (Dict String String))
 listProjects conn =
-    case Db.query conn "SELECT id, name FROM projects ORDER BY name" [] of
+    case Task.run (Db.query conn "SELECT id, name FROM projects ORDER BY name" []) of
 
         Ok rows ->
             Ok rows
 
         Err e ->
-            Err """Failed to list projects: {{errorToString e}}"""
+            Err ("Failed to list projects: " ++ errorToString e)
 
 
-listEnvs : String -> Int -> Result String (List (Dict String String))
 listEnvs conn projectId =
-    case Db.query conn "SELECT DISTINCT environment FROM env_vars WHERE project_id = ? ORDER BY environment" [ String.fromInt projectId ] of
+    case Task.run
+            (Db.query conn
+                "SELECT DISTINCT environment FROM env_vars WHERE project_id = ? ORDER BY environment"
+                [ String.fromInt projectId ]) of
 
         Ok rows ->
             Ok rows
 
         Err e ->
-            Err """Failed to list environments: {{errorToString e}}"""
+            Err ("Failed to list environments: " ++ errorToString e)
 
 
-getField : String -> (Dict String String) -> String
-getField field row = Db.getField field row
+getField field row =
+    Maybe.withDefault "" (Dict.get field row)

@@ -3,22 +3,28 @@ module Lib.Os exposing (getEnv, getCwd, getHome, getProjectName)
 import Sky.Core.Prelude exposing (..)
 import Sky.Core.Process as Process
 import Sky.Core.Path as Path
+import Sky.Core.Task as Task
 
 
+-- Process.getEnv / getCwd are Task Error a — the Sky compiler's
+-- effect-boundary audit (v0.9.6) made every effectful kernel
+-- properly Task-typed. Force with Task.run at the boundary and
+-- collapse the typed Error into the empty-string default this
+-- module's API has always exposed.
 getEnv : String -> String
 getEnv key =
-    case Process.getEnv key of
+    case Task.run (Process.getEnv key) of
 
-        Just value ->
+        Ok value ->
             value
 
-        Nothing ->
+        Err _ ->
             ""
 
 
 getCwd : () -> String
 getCwd _ =
-    case Process.getCwd of
+    case Task.run Process.getCwd of
 
         Ok dir ->
             dir

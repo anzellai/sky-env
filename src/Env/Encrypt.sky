@@ -65,7 +65,12 @@ decryptWithKey key ciphertext =
     runWithKey key decryptArgsForKey ciphertext
 
 
-runWithKey : String -> (String -> List String) -> String -> Result String String
+-- Type annotation removed: typed-codegen can't widen the lambda's
+-- `func(any) any` shape into `func(string) any` at the HOF param
+-- boundary. Letting HM default the function-arg type
+-- polymorphically lets both call sites pass a lambda without a
+-- nominal-type-mismatch failure. Same class as CLAUDE.md
+-- Limitation #14 — typed function-arg coercion has gaps.
 runWithKey key argsFor content =
     case writeKeyFile key of
 
