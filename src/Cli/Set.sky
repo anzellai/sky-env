@@ -30,12 +30,12 @@ promptAndSet secret env key =
     let
         _ = Io.writeStdout ("  Enter value for " ++ key ++ ": ")
         input =
-            case Io.readLine () of
+            case Task.run (Io.readLine ()) of
 
-                Just v ->
+                Ok v ->
                     String.trim v
 
-                Nothing ->
+                Err _ ->
                     ""
     in
         if String.isEmpty input then

@@ -57,12 +57,12 @@ confirmAndRotate oldSecret =
         _ = println ""
         _ = Io.writeStdout "Type 'rotate' to confirm: "
         answer =
-            case Io.readLine () of
-                
-                Just v ->
+            case Task.run (Io.readLine ()) of
+
+                Ok v ->
                     String.trim v
-                
-                Nothing ->
+
+                Err _ ->
                     ""
     in
         if answer /= "rotate" then

@@ -168,12 +168,12 @@ promptForKey key =
     let
         _ = Io.writeStdout ("  Enter value for " ++ key ++ ": ")
         value =
-            case Io.readLine () of
+            case Task.run (Io.readLine ()) of
 
-                Just v ->
+                Ok v ->
                     String.trim v
 
-                Nothing ->
+                Err _ ->
                     ""
     in
         ( key , value )

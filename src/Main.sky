@@ -1,8 +1,11 @@
 module Main exposing (main)
 
+import Sky.Core.Maybe as Maybe
 import Sky.Core.Prelude exposing (..)
+import Sky.Core.Result as Result
 import Sky.Core.String as String
-import Sky.Core.Args as Args
+import Sky.Core.System as System
+import Sky.Core.Task as Task
 import Std.Log exposing (println)
 import Cli.Init as Init
 import Cli.Import as Import
@@ -14,10 +17,20 @@ import Cli.Rotate as Rotate
 import Modernc.Org.Sqlite as _
 
 
+-- v0.10.0: System.getArg returns `Task Error (Maybe String)`. The
+-- CLI only inspects argv at startup, so we collapse the Task chain
+-- to a bare `Maybe String` once at the entry point and keep the
+-- existing `case … of Just/Nothing` dispatch code unchanged.
+arg : Int -> Maybe String
+arg n =
+    Task.run (System.getArg n)
+        |> Result.withDefault Nothing
+
+
 main =
     let
         command =
-            case Args.getArg 1 of
+            case arg 1 of
 
                 Just cmd ->
                     cmd
@@ -34,7 +47,7 @@ dispatch command =
         Init.runInit ()
 
     else if command == "import" then
-        case Args.getArg 2 of
+        case arg 2 of
 
             Just env ->
                 Import.runImport env
@@ -43,7 +56,7 @@ dispatch command =
                 let _ = println "Usage: sky-env import <env>" in ()
 
     else if command == "print" then
-        case Args.getArg 2 of
+        case arg 2 of
 
             Just env ->
                 Print.runPrint env
@@ -69,13 +82,13 @@ dispatch command =
 
 dispatchSet : () -> ()
 dispatchSet _ =
-    case Args.getArg 2 of
+    case arg 2 of
 
         Nothing ->
             let _ = println "Usage: sky-env set <env> <key>" in ()
 
         Just env ->
-            case Args.getArg 3 of
+            case arg 3 of
 
                 Nothing ->
                     let _ = println "Usage: sky-env set <env> <key>" in ()
