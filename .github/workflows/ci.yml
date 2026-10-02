@@ -21,7 +21,7 @@ jobs:
 
       - name: Install sky compiler + companion tools
         run: |
-          curl -fsSL https://raw.githubusercontent.com/anzellai/sky/main/install.sh | sudo sh -s -- --version 0.26.1
+          curl -fsSL https://raw.githubusercontent.com/anzellai/sky/main/install.sh | sudo sh -s -- --version 0.27.1
           sky --version
 
       - name: Type-check
