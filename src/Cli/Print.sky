@@ -34,35 +34,58 @@ doPrint secret env =
         case Db.getConn () of
 
             Err e ->
-                let _ = println """Database error: {{e}}""" in ()
+                let
+                    _ = println """Database error: {{e}}"""
+                in
+                    ()
 
             Ok conn ->
                 case Db.initSchema conn of
 
                     Err e ->
-                        let _ = println """Schema error: {{e}}""" in ()
+                        let
+                            _ = println """Schema error: {{e}}"""
+                        in
+                            ()
 
                     Ok _ ->
                         case Db.ensureProject conn project of
 
                             Err e ->
-                                let _ = println """Project error: {{e}}""" in ()
+                                let
+                                    _ = println """Project error: {{e}}"""
+                                in
+                                    ()
 
                             Ok projectId ->
                                 case Db.getVars conn projectId env of
 
                                     Err e ->
-                                        let _ = println """Error: {{e}}""" in ()
+                                        let
+                                            _ = println """Error: {{e}}"""
+                                        in
+                                            ()
 
                                     Ok rows ->
                                         if List.isEmpty rows then
-                                            let _ = println """No variables found for {{project}}/{{env}}""" in ()
+                                            let
+                                                _ =
+                                                    println
+                                                        """No variables found for {{project}}/{{env}}"""
+                                            in
+                                                ()
 
                                         else
-                                            let _ = List.map (printRow secret) rows in ()
+                                            let
+                                                _ =
+                                                    List.map
+                                                        (printRow secret)
+                                                        rows
+                                            in
+                                                ()
 
 
-printRow : String -> (Dict String String) -> ()
+printRow : String -> Dict String String -> ()
 printRow secret row =
     let
         key = Db.getField "key" row
@@ -71,7 +94,13 @@ printRow secret row =
         case Encrypt.decrypt secret encValue of
 
             Ok value ->
-                let _ = println """{{key}}={{value}}""" in ()
+                let
+                    _ = println """{{key}}={{value}}"""
+                in
+                    ()
 
             Err msg ->
-                let _ = println """{{key}}=<{{msg}}>""" in ()
+                let
+                    _ = println """{{key}}=<{{msg}}>"""
+                in
+                    ()

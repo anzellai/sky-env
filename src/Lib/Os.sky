@@ -37,8 +37,10 @@ getCwd _ =
 
 
 getHome : () -> String
-getHome _ = getEnv "HOME"
+getHome _ =
+    getEnv "HOME"
 
 
 getProjectName : () -> String
-getProjectName _ = Path.base (getCwd ())
+getProjectName _ =
+    Path.base (getCwd ())

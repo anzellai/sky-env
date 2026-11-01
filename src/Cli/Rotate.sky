@@ -16,7 +16,11 @@ import Db.Db as Db
 -- A pending re-encryption: the row identity (project, env, key)
 -- plus the value already encrypted under the new secret.
 type alias Rotation =
-    { projectId : Int , env : String , key : String , ciphertext : String }
+    { projectId : Int
+    , env : String
+    , key : String
+    , ciphertext : String
+    }
 
 
 runRotate : () -> ()
@@ -30,7 +34,7 @@ runRotate _ =
                 _ = println "Run 'sky-env init' to generate a secret."
             in
                 ()
-        
+
         else
             confirmAndRotate oldSecret
 
@@ -44,8 +48,10 @@ confirmAndRotate oldSecret =
         _ = println "It will:"
         _ = println "  1. Back up the database file"
         _ = println "  2. Generate a new 256-bit secret"
-        _ = println "  3. Decrypt every stored variable with the current secret"
-        _ = println "  4. Re-encrypt them with the new secret and write back"
+        _ =
+            println "  3. Decrypt every stored variable with the current secret"
+        _ =
+            println "  4. Re-encrypt them with the new secret and write back"
         _ = println ""
         _ =
             println
@@ -70,7 +76,7 @@ confirmAndRotate oldSecret =
                 _ = println "Cancelled."
             in
                 ()
-        
+
         else
             startRotation oldSecret
 
@@ -86,14 +92,15 @@ startRotation oldSecret =
                 _ = println "Cannot generate a new secret. Aborted."
             in
                 ()
-        
+
         else
             withBackup oldSecret newSecret
 
 
 generateSecret : () -> String
 generateSecret _ =
-    case Task.run (Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
+    case Task.run
+             (Process.run "sh" [ "-c", "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
 
         Ok output ->
             String.trim output
@@ -105,13 +112,13 @@ generateSecret _ =
 withBackup : String -> String -> ()
 withBackup oldSecret newSecret =
     case Db.getDbPath () of
-        
+
         Err e ->
             let
                 _ = println ("Error: " ++ e)
             in
                 ()
-        
+
         Ok dbPath ->
             if not (Task.run (File.exists dbPath) |> Result.withDefault False) then
                 let
@@ -119,17 +126,17 @@ withBackup oldSecret newSecret =
                     _ = println "Nothing to rotate."
                 in
                     ()
-            
+
             else
                 case backupDb dbPath of
-                    
+
                     Err e ->
                         let
                             _ = println ("Backup failed: " ++ e)
                             _ = println "Aborted before any changes."
                         in
                             ()
-                    
+
                     Ok backupPath ->
                         let
                             _ = println ""
@@ -168,25 +175,25 @@ timestamp _ =
 doRotation : String -> String -> String -> ()
 doRotation oldSecret newSecret backupPath =
     case Db.getConn () of
-        
+
         Err e ->
             let
                 _ = println ("Database error: " ++ e)
             in
                 ()
-        
+
         Ok conn ->
             case Db.initSchema conn of
-                
+
                 Err e ->
                     let
                         _ = println ("Schema error: " ++ e)
                     in
                         ()
-                
+
                 Ok _ ->
                     case collectAll conn oldSecret newSecret of
-                        
+
                         Err e ->
                             let
                                 _ = println ""
@@ -199,7 +206,7 @@ doRotation oldSecret newSecret backupPath =
                                 _ = println ("  " ++ backupPath)
                             in
                                 ()
-                        
+
                         Ok rotations ->
                             if List.isEmpty rotations then
                                 let
@@ -209,27 +216,27 @@ doRotation oldSecret newSecret backupPath =
                                             "No encrypted variables found. Nothing to rotate."
                                 in
                                     ()
-                            
+
                             else
                                 writeAll conn newSecret rotations backupPath
 
 
 collectAll conn oldSecret newSecret =
     case Db.listProjects conn of
-        
+
         Err e ->
             Err e
-        
+
         Ok projects ->
             walkProjects conn oldSecret newSecret projects []
 
 
 walkProjects conn oldSecret newSecret projects acc =
     case projects of
-        
+
         [] ->
             Ok (List.reverse acc)
-        
+
         project :: rest ->
             let
                 projectId = parseProjectId project
@@ -237,94 +244,93 @@ walkProjects conn oldSecret newSecret projects acc =
             in
                 if projectId < 0 then
                     Err ("Invalid project id for " ++ projectName)
-                
+
                 else
                     case walkEnvs conn oldSecret newSecret projectId acc of
-                        
+
                         Err e ->
                             Err e
-                        
+
                         Ok newAcc ->
                             walkProjects conn oldSecret newSecret rest newAcc
 
 
-parseProjectId : (Dict String String) -> Int
+parseProjectId : Dict String String -> Int
 parseProjectId project =
     case String.toInt (Db.getField "id" project) of
-        
+
         Just n ->
             n
-        
+
         Nothing ->
             -1
 
 
 walkEnvs conn oldSecret newSecret projectId acc =
     case Db.listEnvs conn projectId of
-        
+
         Err e ->
             Err e
-        
+
         Ok envRows ->
             let
-                envNames = List.map (\r -> Db.getField "environment" r) envRows
+                envNames =
+                    List.map (\r -> Db.getField "environment" r) envRows
             in
                 walkEnvNames conn oldSecret newSecret projectId envNames acc
 
 
 walkEnvNames conn oldSecret newSecret projectId envs acc =
     case envs of
-        
+
         [] ->
             Ok acc
-        
+
         env :: rest ->
             case walkVars conn oldSecret newSecret projectId env acc of
-                
+
                 Err e ->
                     Err e
-                
+
                 Ok newAcc ->
                     walkEnvNames conn oldSecret newSecret projectId rest newAcc
 
 
 walkVars conn oldSecret newSecret projectId env acc =
     case Db.getVars conn projectId env of
-        
+
         Err e ->
             Err e
-        
+
         Ok rows ->
             rotateRows oldSecret newSecret projectId env rows acc
 
 
-rotateRows : String -> String -> Int -> String -> (List (Dict String String)) -> (List Rotation) -> Result String (List Rotation)
+rotateRows : String -> String -> Int -> String -> List (Dict String String) -> List Rotation -> Result String (List Rotation)
 rotateRows oldSecret newSecret projectId env rows acc =
     case rows of
-        
+
         [] ->
             Ok acc
-        
+
         row :: rest ->
             let
                 key = Db.getField "key" row
                 encValue = Db.getField "value" row
             in
                 case Encrypt.decrypt oldSecret encValue of
-                    
+
                     Err e ->
                         Err ("decrypt " ++ env ++ "/" ++ key ++ ": " ++ e)
-                    
+
                     Ok plaintext ->
                         case Encrypt.encryptWithKey newSecret plaintext of
-                            
+
                             Err e ->
                                 Err
-                                    (
-                                    "re-encrypt "
-                                        ++ env ++ "/" ++ key ++ ": " ++ e
-                                    )
-                            
+                                    ("re-encrypt " ++ env ++ "/" ++ key ++ ": "
+                                        ++ e)
+
                             Ok newCipher ->
                                 let
                                     rotation =
@@ -334,14 +340,18 @@ rotateRows oldSecret newSecret projectId env rows acc =
                                         , ciphertext = newCipher
                                         }
                                 in
-                                    rotateRows oldSecret newSecret projectId env
+                                    rotateRows
+                                        oldSecret
+                                        newSecret
+                                        projectId
+                                        env
                                         rest
                                         (rotation :: acc)
 
 
 writeAll conn newSecret rotations backupPath =
     case writeRotations conn rotations 0 of
-        
+
         Err e ->
             let
                 _ = println ""
@@ -358,23 +368,23 @@ writeAll conn newSecret rotations backupPath =
                 _ = println ""
             in
                 ()
-        
+
         Ok count ->
             printSuccess newSecret count backupPath
 
 
 writeRotations conn rotations count =
     case rotations of
-        
+
         [] ->
             Ok count
-        
+
         r :: rest ->
             case Db.setVar conn r.projectId r.env r.key r.ciphertext of
-                
+
                 Err e ->
                     Err e
-                
+
                 Ok _ ->
                     writeRotations conn rest (count + 1)
 
@@ -386,7 +396,8 @@ printSuccess newSecret count backupPath =
         _ = println ""
         _ = println ("Re-encrypted " ++ countStr ++ " variable(s).")
         _ = println ""
-        _ = println "NEW SECRET (save this NOW — it will not be shown again):"
+        _ =
+            println "NEW SECRET (save this NOW — it will not be shown again):"
         _ = println ""
         _ = println ("  " ++ newSecret)
         _ = println ""
@@ -394,7 +405,8 @@ printSuccess newSecret count backupPath =
         _ = println ""
         _ = println ("  export SKY_ENV_SECRET=\"" ++ newSecret ++ "\"")
         _ = println ""
-        _ = println "Then reload (e.g. 'source ~/.zshrc') before running any"
+        _ =
+            println "Then reload (e.g. 'source ~/.zshrc') before running any"
         _ = println "other sky-env command."
         _ = println ""
         _ = println ("Backup of pre-rotation database: " ++ backupPath)

@@ -18,8 +18,6 @@ import Sky.Core.Task as Task
 -- columns. Each call generates a fresh random salt (embedded in the
 -- output), so encrypting the same value twice produces different
 -- ciphertexts.
-
-
 encrypt : String -> String -> Result String String
 encrypt _ plaintext =
     case writeTemp plaintext of
@@ -54,8 +52,6 @@ decrypt _ ciphertext =
 -- file instead of $SKY_ENV_SECRET. Used by `sky-env rotate` so that
 -- the old key (in the env var) can decrypt while the new key encrypts
 -- without ever shelling out to a process with a different env.
-
-
 encryptWithKey : String -> String -> Result String String
 encryptWithKey key plaintext =
     runWithKey key encryptArgsForKey plaintext
@@ -82,8 +78,10 @@ runWithKey key argsFor content =
             case writeTemp content of
 
                 Err e ->
-                    let _ = Task.run (File.remove keyPath) in
-                    Err e
+                    let
+                        _ = Task.run (File.remove keyPath)
+                    in
+                        Err e
 
                 Ok tmpPath ->
                     let
@@ -105,8 +103,10 @@ writeKeyFile key =
             case Task.run (File.writeFile keyPath key) of
 
                 Err e ->
-                    let _ = Task.run (File.remove keyPath) in
-                    Err ("write key: " ++ errorToString e)
+                    let
+                        _ = Task.run (File.remove keyPath)
+                    in
+                        Err ("write key: " ++ errorToString e)
 
                 Ok _ ->
                     Ok keyPath
@@ -172,10 +172,10 @@ decryptArgs =
     ]
 
 
-runOpenssl : (List String) -> String -> Result String String
+runOpenssl : List String -> String -> Result String String
 runOpenssl baseArgs tmpPath =
     let
-        args = baseArgs ++ [ "-in" , tmpPath ]
+        args = baseArgs ++ [ "-in", tmpPath ]
     in
         case Task.run (Process.run "openssl" args) of
 

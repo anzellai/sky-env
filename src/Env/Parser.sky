@@ -15,7 +15,7 @@ parseEnv content =
         Dict.fromList pairs
 
 
-parseLine : String -> Maybe (String, String)
+parseLine : String -> Maybe ( String, String )
 parseLine line =
     let
         trimmed = String.trim line
@@ -30,7 +30,7 @@ parseLine line =
             parseKeyValue trimmed
 
 
-parseKeyValue : String -> Maybe (String, String)
+parseKeyValue : String -> Maybe ( String, String )
 parseKeyValue line =
     let
         eqIdx = findChar "=" line 0
@@ -41,7 +41,9 @@ parseKeyValue line =
         else
             let
                 key = String.trim (String.slice 0 eqIdx line)
-                rawValue = String.trim (String.slice (eqIdx + 1) (String.length line) line)
+                rawValue =
+                    String.trim
+                        (String.slice (eqIdx + 1) (String.length line) line)
                 value = stripQuotes rawValue
             in
                 if String.isEmpty key then
@@ -53,14 +55,10 @@ parseKeyValue line =
 
 stripQuotes : String -> String
 stripQuotes s =
-    if String.length s >= 2
-        && String.startsWith "\"" s
-        && String.endsWith "\"" s then
+    if String.length s >= 2 && String.startsWith "\"" s && String.endsWith "\"" s then
         String.slice 1 (String.length s - 1) s
 
-    else if String.length s >= 2
-        && String.startsWith "'" s
-        && String.endsWith "'" s then
+    else if String.length s >= 2 && String.startsWith "'" s && String.endsWith "'" s then
         String.slice 1 (String.length s - 1) s
 
     else
@@ -88,7 +86,7 @@ serializeEnv vars =
         String.join "\n" lines
 
 
-formatPair : (String, String) -> String
+formatPair : ( String, String ) -> String
 formatPair pair =
     let
         k = fst pair

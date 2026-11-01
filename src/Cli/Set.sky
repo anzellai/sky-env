@@ -39,7 +39,10 @@ promptAndSet secret env key =
                     ""
     in
         if String.isEmpty input then
-            let _ = println "Cancelled (empty value)." in ()
+            let
+                _ = println "Cancelled (empty value)."
+            in
+                ()
 
         else
             doSet secret env key input
@@ -50,7 +53,10 @@ doSet secret env key value =
     case Encrypt.encrypt secret value of
 
         Err e ->
-            let _ = println ("Encrypt error: " ++ e) in ()
+            let
+                _ = println ("Encrypt error: " ++ e)
+            in
+                ()
 
         Ok encrypted ->
             writeVar env key encrypted
@@ -64,25 +70,45 @@ writeVar env key encrypted =
         case Db.getConn () of
 
             Err e ->
-                let _ = println ("Database error: " ++ e) in ()
+                let
+                    _ = println ("Database error: " ++ e)
+                in
+                    ()
 
             Ok conn ->
                 case Db.initSchema conn of
 
                     Err e ->
-                        let _ = println ("Schema error: " ++ e) in ()
+                        let
+                            _ = println ("Schema error: " ++ e)
+                        in
+                            ()
 
                     Ok _ ->
                         case Db.ensureProject conn project of
 
                             Err e ->
-                                let _ = println ("Project error: " ++ e) in ()
+                                let
+                                    _ = println ("Project error: " ++ e)
+                                in
+                                    ()
 
                             Ok projectId ->
                                 case Db.setVar conn projectId env key encrypted of
 
                                     Err e ->
-                                        let _ = println ("Error: " ++ e) in ()
+                                        let
+                                            _ = println ("Error: " ++ e)
+                                        in
+                                            ()
 
                                     Ok _ ->
-                                        let _ = println ("Set " ++ key ++ " in " ++ project ++ "/" ++ env) in ()
+                                        let
+                                            _ =
+                                                println
+                                                    ("Set " ++ key ++ " in "
+                                                        ++ project
+                                                        ++ "/"
+                                                        ++ env)
+                                        in
+                                            ()

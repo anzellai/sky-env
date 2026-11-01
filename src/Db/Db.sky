@@ -1,4 +1,15 @@
-module Db.Db exposing (getConn, getDbPath, initSchema, ensureProject, importVars, setVar, getVars, listProjects, listEnvs, getField)
+module Db.Db exposing
+    ( getConn
+    , getDbPath
+    , initSchema
+    , ensureProject
+    , importVars
+    , setVar
+    , getVars
+    , listProjects
+    , listEnvs
+    , getField
+    )
 
 -- DB layer for sky-env. Sky compiler v0.9.6 effect-boundary audit
 -- migrated Std.Db.* from Result Error a to Task Error a (real I/O
@@ -36,11 +47,12 @@ getConn _ =
 
         else
             let
-                dir = Path.join [ home , ".local" , "sky-env" ]
+                dir = Path.join [ home, ".local", "sky-env" ]
                 _ = Task.run (File.mkdirAll dir)
-                dbPath = Path.join [ dir , "skyenv.db" ]
+                dbPath = Path.join [ dir, "skyenv.db" ]
             in
                 case Task.run (Db.open "sqlite" dbPath) of
+
                     Ok conn ->
                         Ok conn
 
@@ -56,21 +68,23 @@ getDbPath _ =
             Err "HOME environment variable not set"
 
         else
-            Ok (Path.join [ home , ".local" , "sky-env" , "skyenv.db" ])
+            Ok (Path.join [ home, ".local", "sky-env", "skyenv.db" ])
 
 
 initSchema conn =
     let
         r1 =
             Task.run
-                (Db.execRaw conn
+                (Db.execRaw
+                    conn
                     """CREATE TABLE IF NOT EXISTS projects (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT NOT NULL UNIQUE
                     )""")
         r2 =
             Task.run
-                (Db.execRaw conn
+                (Db.execRaw
+                    conn
                     """CREATE TABLE IF NOT EXISTS env_vars (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         project_id INTEGER NOT NULL,
@@ -89,7 +103,9 @@ initSchema conn =
                 case r2 of
 
                     Err e ->
-                        Err ("Failed to create env_vars table: " ++ errorToString e)
+                        Err
+                            ("Failed to create env_vars table: "
+                                ++ errorToString e)
 
                     Ok _ ->
                         Ok ()
@@ -99,12 +115,14 @@ ensureProject conn name =
     let
         _ =
             Task.run
-                (Db.exec conn
+                (Db.exec
+                    conn
                     "INSERT OR IGNORE INTO projects (name) VALUES (?)"
                     [ name ])
         rows =
             Task.run
-                (Db.query conn
+                (Db.query
+                    conn
                     "SELECT id FROM projects WHERE name = ? LIMIT 1"
                     [ name ])
     in
@@ -127,9 +145,10 @@ importVars conn projectId env vars =
     let
         delResult =
             Task.run
-                (Db.exec conn
+                (Db.exec
+                    conn
                     "DELETE FROM env_vars WHERE project_id = ? AND environment = ?"
-                    [ String.fromInt projectId , env ])
+                    [ String.fromInt projectId, env ])
     in
         case delResult of
 
@@ -139,16 +158,26 @@ importVars conn projectId env vars =
             Ok _ ->
                 let
                     pairs = Dict.toList vars
-                    _ = List.map (\pair -> insertVar conn projectId env (fst pair) (snd pair)) pairs
+                    _ =
+                        List.map
+                            (\pair ->
+                                insertVar
+                                    conn
+                                    projectId
+                                    env
+                                    (fst pair)
+                                    (snd pair))
+                            pairs
                 in
                     Ok (List.length pairs)
 
 
 insertVar conn projectId env key value =
     case Task.run
-            (Db.exec conn
-                "INSERT INTO env_vars (project_id, environment, key, value) VALUES (?, ?, ?, ?)"
-                [ String.fromInt projectId , env , key , value ]) of
+             (Db.exec
+                 conn
+                 "INSERT INTO env_vars (project_id, environment, key, value) VALUES (?, ?, ?, ?)"
+                 [ String.fromInt projectId, env, key, value ]) of
 
         Ok _ ->
             Ok ()
@@ -161,18 +190,20 @@ setVar conn projectId env key value =
     let
         _ =
             Task.run
-                (Db.exec conn
+                (Db.exec
+                    conn
                     "DELETE FROM env_vars WHERE project_id = ? AND environment = ? AND key = ?"
-                    [ String.fromInt projectId , env , key ])
+                    [ String.fromInt projectId, env, key ])
     in
         insertVar conn projectId env key value
 
 
 getVars conn projectId env =
     case Task.run
-            (Db.query conn
-                "SELECT key, value FROM env_vars WHERE project_id = ? AND environment = ? ORDER BY key"
-                [ String.fromInt projectId , env ]) of
+             (Db.query
+                 conn
+                 "SELECT key, value FROM env_vars WHERE project_id = ? AND environment = ? ORDER BY key"
+                 [ String.fromInt projectId, env ]) of
 
         Ok rows ->
             Ok rows
@@ -182,7 +213,8 @@ getVars conn projectId env =
 
 
 listProjects conn =
-    case Task.run (Db.query conn "SELECT id, name FROM projects ORDER BY name" []) of
+    case Task.run
+             (Db.query conn "SELECT id, name FROM projects ORDER BY name" []) of
 
         Ok rows ->
             Ok rows
@@ -193,9 +225,10 @@ listProjects conn =
 
 listEnvs conn projectId =
     case Task.run
-            (Db.query conn
-                "SELECT DISTINCT environment FROM env_vars WHERE project_id = ? ORDER BY environment"
-                [ String.fromInt projectId ]) of
+             (Db.query
+                 conn
+                 "SELECT DISTINCT environment FROM env_vars WHERE project_id = ? ORDER BY environment"
+                 [ String.fromInt projectId ]) of
 
         Ok rows ->
             Ok rows

@@ -38,7 +38,10 @@ doImport secret env =
         case loadEnvFile env of
 
             Err msg ->
-                let _ = println ("Error: " ++ msg) in ()
+                let
+                    _ = println ("Error: " ++ msg)
+                in
+                    ()
 
             Ok content ->
                 importContent secret project env content
@@ -53,13 +56,16 @@ importContent secret project env content =
         case encryptResult of
 
             Err e ->
-                let _ = println ("Encrypt error: " ++ e) in ()
+                let
+                    _ = println ("Encrypt error: " ++ e)
+                in
+                    ()
 
             Ok encryptedPairs ->
                 writeToDb project env (Dict.fromList encryptedPairs)
 
 
-encryptAll : String -> (List (String, String)) -> (List (String, String)) -> Result String (List (String, String))
+encryptAll : String -> List ( String, String ) -> List ( String, String ) -> Result String (List ( String, String ))
 encryptAll secret pairs acc =
     case pairs of
 
@@ -73,38 +79,56 @@ encryptAll secret pairs acc =
                     Err e
 
                 Ok ciphertext ->
-                    encryptAll secret rest (( fst pair , ciphertext ) :: acc)
+                    encryptAll secret rest (( fst pair, ciphertext ) :: acc)
 
 
-writeToDb : String -> String -> (Dict String String) -> ()
+writeToDb : String -> String -> Dict String String -> ()
 writeToDb project env encrypted =
     case Db.getConn () of
 
         Err e ->
-            let _ = println ("Database error: " ++ e) in ()
+            let
+                _ = println ("Database error: " ++ e)
+            in
+                ()
 
         Ok conn ->
             case Db.initSchema conn of
 
                 Err e ->
-                    let _ = println ("Schema error: " ++ e) in ()
+                    let
+                        _ = println ("Schema error: " ++ e)
+                    in
+                        ()
 
                 Ok _ ->
                     case Db.ensureProject conn project of
 
                         Err e ->
-                            let _ = println ("Project error: " ++ e) in ()
+                            let
+                                _ = println ("Project error: " ++ e)
+                            in
+                                ()
 
                         Ok projectId ->
                             case Db.importVars conn projectId env encrypted of
 
                                 Err e ->
-                                    let _ = println ("Import error: " ++ e) in ()
+                                    let
+                                        _ = println ("Import error: " ++ e)
+                                    in
+                                        ()
 
                                 Ok count ->
                                     let
                                         countStr = String.fromInt count
-                                        _ = println ("Imported " ++ countStr ++ " variables into " ++ project ++ "/" ++ env)
+                                        _ =
+                                            println
+                                                ("Imported " ++ countStr
+                                                    ++ " variables into "
+                                                    ++ project
+                                                    ++ "/"
+                                                    ++ env)
                                     in
                                         ()
 
@@ -154,7 +178,7 @@ promptFromExample content =
         String.join "\n" (List.map formatPair filled)
 
 
-formatPair : (String, String) -> String
+formatPair : ( String, String ) -> String
 formatPair pair =
     let
         k = fst pair
@@ -163,7 +187,7 @@ formatPair pair =
         k ++ "=" ++ v
 
 
-promptForKey : String -> (String, String)
+promptForKey : String -> ( String, String )
 promptForKey key =
     let
         _ = Io.writeStdout ("  Enter value for " ++ key ++ ": ")
@@ -176,4 +200,4 @@ promptForKey key =
                 Err _ ->
                     ""
     in
-        ( key , value )
+        ( key, value )

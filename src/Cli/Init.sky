@@ -7,6 +7,7 @@ import Sky.Core.Task as Task
 import Std.Log exposing (println)
 import Lib.Os as Os
 
+
 runInit : () -> ()
 runInit _ =
     let
@@ -14,7 +15,7 @@ runInit _ =
     in
         if not (String.isEmpty existing) then
             warnAlreadySet ()
-        
+
         else
             generateSecret ()
 
@@ -27,10 +28,13 @@ warnAlreadySet _ =
             println
                 "Warning: SKY_ENV_SECRET is already set in your environment."
         _ = println ""
-        _ = println "Generating a new secret will make existing encrypted data"
-        _ = println "unreadable. Use 'sky-env list' to check what is stored."
+        _ =
+            println "Generating a new secret will make existing encrypted data"
+        _ =
+            println "unreadable. Use 'sky-env list' to check what is stored."
         _ = println ""
-        _ = println "If you really want a new secret, unset the variable first:"
+        _ =
+            println "If you really want a new secret, unset the variable first:"
         _ = println ""
         _ = println "  unset SKY_ENV_SECRET"
         _ = println "  sky-env init"
@@ -47,18 +51,20 @@ generateSecret _ =
         if String.isEmpty secret then
             let
                 _ = println "Error: failed to read /dev/urandom."
-                _ = println "Generate a 32-byte hex secret manually and export"
+                _ =
+                    println "Generate a 32-byte hex secret manually and export"
                 _ = println "it as SKY_ENV_SECRET."
             in
                 ()
-        
+
         else
             printSecret secret
 
 
 readRandomHex : () -> String
 readRandomHex _ =
-    case Task.run (Process.run "sh" [ "-c" , "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
+    case Task.run
+             (Process.run "sh" [ "-c", "head -c 32 /dev/urandom | xxd -p -c 32" ]) of
 
         Ok output ->
             String.trim output
@@ -81,8 +87,10 @@ printSecret secret =
         _ = println ""
         _ = println "Then restart your shell or run: source ~/.zshrc"
         _ = println ""
-        _ = println "Keep this secret safe — losing it means losing access to"
-        _ = println "all encrypted environment variables stored under this key."
+        _ =
+            println "Keep this secret safe — losing it means losing access to"
+        _ =
+            println "all encrypted environment variables stored under this key."
         _ = println ""
     in
         ()

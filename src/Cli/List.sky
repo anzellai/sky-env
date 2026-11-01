@@ -13,26 +13,42 @@ runList _ =
     case Db.getConn () of
 
         Err e ->
-            let _ = println ("Database error: " ++ e) in ()
+            let
+                _ = println ("Database error: " ++ e)
+            in
+                ()
 
         Ok conn ->
             case Db.initSchema conn of
 
                 Err e ->
-                    let _ = println ("Schema error: " ++ e) in ()
+                    let
+                        _ = println ("Schema error: " ++ e)
+                    in
+                        ()
 
                 Ok _ ->
                     case Db.listProjects conn of
 
                         Err e ->
-                            let _ = println ("Error: " ++ e) in ()
+                            let
+                                _ = println ("Error: " ++ e)
+                            in
+                                ()
 
                         Ok projects ->
                             if List.isEmpty projects then
-                                let _ = println "No projects stored yet." in ()
+                                let
+                                    _ = println "No projects stored yet."
+                                in
+                                    ()
 
                             else
-                                let _ = List.map (printProject conn) projects in ()
+                                let
+                                    _ =
+                                        List.map (printProject conn) projects
+                                in
+                                    ()
 
 
 printProject conn project =
@@ -58,7 +74,9 @@ printProject conn project =
                 let
                     _ =
                         List.map
-                            (\env -> println ("  - " ++ Db.getField "environment" env))
+                            (\env ->
+                                println
+                                    ("  - " ++ Db.getField "environment" env))
                             envs
                 in
                     ()
