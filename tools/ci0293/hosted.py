@@ -17,6 +17,19 @@ def source(root):
   f=root/q;need(f.is_file() and not f.is_symlink(),'SourceNotRegular');rows[n]=sha(f)
  return rows
 
+def resolved_argv(argv, search_path):
+ """The unchanged spawn gate uses execv: resolve ONLY the explicit child PATH."""
+ need(bool(argv) and isinstance(argv[0], str), 'CommandArgumentsInvalid')
+ program=argv[0]
+ if not Path(program).is_absolute():
+  need('/' not in program and '\\' not in program, 'RelativeCommandPathRefused')
+  need(isinstance(search_path, str) and bool(search_path) and all(Path(p).is_absolute() for p in search_path.split(os.pathsep)), 'CommandSearchPathInvalid')
+  program=shutil.which(program, path=search_path)
+  need(program is not None, 'CommandExecutableMissing')
+ program=Path(program).resolve(strict=True)
+ need(program.is_absolute() and program.is_file() and os.access(program, os.X_OK), 'CommandExecutableInvalid')
+ return [str(program), *argv[1:]]
+
 def main():
  a=argparse.ArgumentParser();a.add_argument('app',choices=['sky-env','sky-log','jokeraces-bot']);a.add_argument('--head',required=True);a.add_argument('--tools',type=Path,required=True);x=a.parse_args();root=Path.cwd()
  need(re.fullmatch('[0-9a-f]{40}',x.head) is not None and subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==x.head,'WrongSource');need(subprocess.check_output(['uname','-m'],text=True).strip()=='arm64','ARM64Required')
@@ -31,7 +44,7 @@ def main():
  def run(label,argv,timeout=1800):
   interrupt.raise_if_requested();f=out/(str(len(phases))+'-'+label+'.private.log')
   with f.open('xb') as w:
-   f.chmod(0o600);p=owner.start(argv,root,ctx,w,expected_exit='command')
+   f.chmod(0o600);p=owner.start(resolved_argv(argv,ctx['PATH']),root,ctx,w,expected_exit='command')
    try:p.communicate(timeout=timeout)
    except subprocess.TimeoutExpired:owner.stop(p);raise RuntimeError('PhaseDeadline') from None
    code=p.returncode;owner.stop(p)
