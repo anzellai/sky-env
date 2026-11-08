@@ -38,7 +38,7 @@ def main():
  for n in subprocess.check_output(['git','ls-files','-z']).decode().split('\0')[:-1]:
   f=root/n
   if blocked(Path(n)) and (f.is_file() or f.is_symlink()):f.unlink()
- initial=source(root);out=root/'ci-results';out.mkdir(mode=0o700);scratch=root/'.ci-scratch';scratch.mkdir(mode=0o700);home=scratch/'home';home.mkdir();tool=x.tools.resolve();official=json.loads((tool/'official-compiler.json').read_text());need(official['officialRelease'] is True and official['version']=='0.29.4' and sha(tool/'sky')==official['binarySHA256'],'OfficialCompilerMismatch')
+ initial=source(root);out=root/'ci-results';out.mkdir(mode=0o700);scratch=root/'.ci-scratch';scratch.mkdir(mode=0o700);home=scratch/'home';home.mkdir();tool=x.tools.resolve();official=json.loads((tool/'official-compiler.json').read_text());need(official['officialRelease'] is True and official['version']=='0.29.5' and sha(tool/'sky')==official['binarySHA256'],'OfficialCompilerMismatch')
  ctx={'PATH':':'.join([str(tool),str(Path(shutil.which('go')).parent),'/opt/homebrew/bin','/usr/bin','/bin','/usr/sbin','/sbin']),'HOME':str(home),'TMPDIR':str(scratch),'LANG':'en_US.UTF-8','CI':'true','GOMAXPROCS':'3','GOFLAGS':'-p=1','GOCACHE':str(scratch/'go-cache'),'GOMODCACHE':str(scratch/'go-mod'),'ENV':'test','SKY_TEST_MODE':'1','SKY_DATA_DIR':str(scratch/'data'),'SKY_LIVE_STORE':'memory','JOKERACES_LITE_MEMORY':'1'}
  owner=Owner();interrupt=Interruption();interrupt.install();passed=cleanup=False;phases=[];guardlog=None
  def run(label,argv,timeout=1800):
