@@ -1,49 +1,60 @@
-name: CI
-
+name: Official0293 native validation
 on:
   push:
-    branches: [main]
+    branches: [main, sky-v0293-rollout]
   pull_request:
     branches: [main]
-
+  workflow_dispatch:
+    inputs:
+      sky_archive_sha256:
+        description: Optional expected official Darwin ARM64 archive SHA256
+        required: false
+      sky_binary_sha256:
+        description: Optional expected official extracted CLI SHA256
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: native0293-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  native:
+    runs-on: macos-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          go-version: '1.26'
-
-      - name: Install goimports (required by sky-dce)
-        run: go install golang.org/x/tools/cmd/goimports@latest
-
-      - name: Install sky compiler + companion tools
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/anzellai/sky/main/install.sh | sudo sh -s -- --version 0.29.2
-          sky --version
-
-      - name: Type-check
-        run: sky check src/Main.sky
-
-      - name: Build
-        run: |
-          rm -rf sky-out .skycache
-          sky install
-          sky build src/Main.sky
-
-      - name: Smoke test (init prints secret)
-        run: |
-          unset SKY_ENV_SECRET
-          ./sky-out/sky-env init | grep -E "^  [0-9a-f]{64}$"
-
-      - name: Smoke test (full round-trip)
-        run: |
-          export SKY_ENV_SECRET=$(head -c 32 /dev/urandom | xxd -p -c 32)
-          mkdir -p /tmp/sky-env-ci && cd /tmp/sky-env-ci
-          echo "API_KEY=test_value_123" > .env.dev
-          echo "DB_URL=postgres://localhost/test" >> .env.dev
-          $GITHUB_WORKSPACE/sky-out/sky-env import dev | grep "Imported 2"
-          $GITHUB_WORKSPACE/sky-out/sky-env print dev | grep "API_KEY=test_value_123"
-          $GITHUB_WORKSPACE/sky-out/sky-env list | grep "sky-env-ci"
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: anzellai/sky
+          ref: v0.29.3
+          path: .ci-toolchain
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Verify official archive, optional pins and exact0293 version
+        env:
+          ARCHIVE_SHA: ${{ inputs.sky_archive_sha256 }}
+          BINARY_SHA: ${{ inputs.sky_binary_sha256 }}
+        run: python3 tools/ci0293/install-sky.py --archive-sha "$ARCHIVE_SHA" --binary-sha "$BINARY_SHA" --out "$RUNNER_TEMP/official-sky0293"
+      - name: Existing safe validation and native build, no application launch
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: python3 tools/ci0293/hosted.py sky-env --head "$SOURCE_SHA" --tools "$RUNNER_TEMP/official-sky0293"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: sky-env-native0293-${{ github.sha }}-${{ github.run_attempt }}
+          path: ci-artifact/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: sky-env-diagnostics-${{ github.sha }}-${{ github.run_attempt }}
+          path: ci-results/
+          if-no-files-found: warn
+          retention-days: 7
