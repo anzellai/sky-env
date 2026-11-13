@@ -4,22 +4,50 @@
 
 `sky-env` stores your environment variables in an **AES-256-CBC encrypted SQLite database**, organised by project and environment. The database is portable across machines, safe to back up, and (with the right secret hygiene) safe to commit to a private git repository.
 
-Built with [Sky](https://github.com/anzellai/sky) — a pure functional language that compiles to a single Go binary, no runtime dependencies.
+Built with [Sky](https://github.com/anzellai/sky), a pure functional language that compiles to a single Go binary, with no runtime dependencies.
+
+## Contents
+
+- [30 second example](#30-second-example)
+- [Why sky-env?](#why-sky-env)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Command reference](#command-reference)
+- [Rotating the secret](#rotating-the-secret)
+- [How it works](#how-it-works)
+  - [Encryption model](#encryption-model)
+  - [Where is the data stored?](#where-is-the-data-stored)
+  - [Portability and backup](#portability-and-backup)
+  - [Sharing secrets with a team](#sharing-secrets-with-a-team)
+- [How is sky-env built?](#how-is-sky-env-built)
+- [License](#license)
+- [Contributing](#contributing)
+
+---
+
+## 30 second example
+
+```bash
+# Install (macOS / Linux)
+curl -fsSL https://github.com/anzellai/sky-env/releases/latest/download/sky-env-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') -o /usr/local/bin/sky-env
+chmod +x /usr/local/bin/sky-env
+
+# Generate a secret, then add the export line it prints to ~/.bashrc or ~/.zshrc
+sky-env init
+
+# From your project directory: encrypt .env.dev into the database
+cd ~/code/my-app
+sky-env import dev
+
+# Print the decrypted variables
+sky-env print dev
+```
 
 ---
 
 ## Why sky-env?
 
-The standard developer workflow for environment variables is broken:
-
-- `.env` files sit on disk in **plaintext**, often in the project root
-- `.env.example` drifts out of sync with the real `.env`
-- Switching between `dev`, `staging`, `prod` means juggling files
-- Sharing secrets with teammates means Slack DMs, 1Password lookups, or "ask Bob"
-- Backing up secrets means hoping you remembered to copy `.env` before reformatting your laptop
-- Multiple projects mean multiple `.env` files to track and rotate
-
-`sky-env` fixes all of these:
+The standard developer workflow for environment variables is broken. `.env` files sit on disk in plaintext, drift out of sync, and are hard to share and back up. `sky-env` fixes these problems:
 
 | Pain | Fix |
 |---|---|
@@ -34,7 +62,7 @@ The standard developer workflow for environment variables is broken:
 
 ## Install
 
-### macOS / Linux (one-liner)
+### One-liner (macOS / Linux)
 
 ```bash
 curl -fsSL https://github.com/anzellai/sky-env/releases/latest/download/sky-env-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/') -o /usr/local/bin/sky-env
@@ -56,11 +84,6 @@ Grab the binary for your platform from [Releases](https://github.com/anzellai/sk
 
 `chmod +x` the binary, drop it on your `PATH`, and you're ready.
 
-### Requirements
-
-- **`openssl`** must be on your `PATH` (installed by default on macOS and most Linux distributions)
-- That's it — no Node, no Python, no Go, no Sky runtime
-
 ### Build from source
 
 ```bash
@@ -70,6 +93,11 @@ sky install
 sky build src/Main.sky
 ./sky-out/sky-env --help
 ```
+
+### Requirements
+
+- **`openssl`** must be on your `PATH` (installed by default on macOS and most Linux distributions)
+- That's it. No Node, no Python, no Go, no Sky runtime.
 
 ---
 
@@ -90,11 +118,11 @@ Add this to your shell config (~/.bashrc or ~/.zshrc):
 
 Then restart your shell or run: source ~/.zshrc
 
-Keep this secret safe — losing it means losing access to
+Keep this secret safe. Losing it means losing access to
 all encrypted environment variables stored under this key.
 ```
 
-The secret is read from `/dev/urandom` (256 bits of true entropy). It is the only thing you need to keep safe — every encrypted value derives its key from this secret via PBKDF2 (100,000 iterations).
+The secret is read from `/dev/urandom` (256 bits of true entropy). It is the only thing you need to keep safe. Every encrypted value derives its key from this secret via PBKDF2 (100,000 iterations).
 
 `sky-env init` will refuse to overwrite an existing `SKY_ENV_SECRET` to prevent accidentally destroying access to existing data.
 
@@ -115,7 +143,7 @@ Imported 14 variables into my-app/prod
 
 `sky-env import <env>` looks for `.env.<env>` first, then falls back to `.env`, then prompts you with `.env.example` keys interactively. The project name comes from the current directory's basename.
 
-You can now safely delete or git-ignore `.env.dev` and `.env.prod` — they're in the encrypted database.
+You can now safely delete or git-ignore `.env.dev` and `.env.prod`. They're in the encrypted database.
 
 ### 3. Print decrypted variables when you need them
 
@@ -183,6 +211,28 @@ internal-tool
 
 ### 7. Rotate the encryption secret
 
+Run `sky-env rotate` to swap to a new secret. Type the word `rotate` to confirm. See [Rotating the secret](#rotating-the-secret) for the full output and the safety steps.
+
+---
+
+## Command reference
+
+```
+sky-env init               Generate a new 256-bit secret (refuses if SKY_ENV_SECRET already set)
+sky-env import <env>       Encrypt and import .env.<env> (or .env, or interactive from .env.example)
+sky-env print <env>        Decrypt and print all variables for <env>
+sky-env set <env> <key>    Set a single variable (prompts for value via stdin)
+sky-env list               List all stored projects and their environments
+sky-env diff               Compare environments for the current project, show missing keys
+sky-env rotate             Rotate the encryption secret (re-encrypts every value, with backup)
+```
+
+The "current project" is always the basename of the working directory. You can manage multiple projects by `cd`-ing between them.
+
+---
+
+## Rotating the secret
+
 When you need to swap to a new secret (a teammate leaves, the old one was on a machine you no longer trust, scheduled rotation), one command does the whole thing:
 
 ```bash
@@ -207,7 +257,7 @@ Database backed up to:
 
 Re-encrypted 26 variable(s).
 
-NEW SECRET (save this NOW — it will not be shown again):
+NEW SECRET (save this NOW, it will not be shown again):
 
   068a0a3091e2f11cc8f532a7be085203323c4606903cb92c35b5744a8a7643c9
 
@@ -223,11 +273,15 @@ The rotation is **transactionally safe**:
 3. Only after every record is validated does sky-env write the new ciphertexts back.
 4. If a write fails mid-way, sky-env prints the exact `cp` command to restore from the backup.
 
-You must type the literal word `rotate` to confirm — anything else cancels with no changes. After a successful rotation, update `SKY_ENV_SECRET` in your shell config and reload before running any other sky-env command.
+You must type the literal word `rotate` to confirm. Anything else cancels with no changes. After a successful rotation, update `SKY_ENV_SECRET` in your shell config and reload before running any other sky-env command.
 
 ---
 
-## Encryption model
+## How it works
+
+This part explains the design. You do not need it to use sky-env.
+
+### Encryption model
 
 `sky-env` uses **AES-256-CBC** with PBKDF2 key derivation, via the system `openssl` binary. Each encrypted value uses:
 
@@ -236,29 +290,22 @@ You must type the literal word `rotate` to confirm — anything else cancels wit
 - **AES-256-CBC** symmetric cipher
 - Output is base64-encoded with the `Salted__` magic header so it round-trips through SQLite TEXT columns
 
-This is the same encryption you get from `openssl enc -aes-256-cbc -pbkdf2 -salt`. It is **standards-compliant**, **interoperable**, and **decryptable from any tool** that can read the OpenSSL salted format — not a custom Sky-only scheme.
+This is the same encryption you get from `openssl enc -aes-256-cbc -pbkdf2 -salt`. It is **standards-compliant**, **interoperable**, and **decryptable from any tool** that can read the OpenSSL salted format. It is not a custom Sky-only scheme.
 
-### What this gets you
+#### What this gets you
 
-✓ **At-rest encryption.** Without `SKY_ENV_SECRET`, the SQLite file is opaque ciphertext. No casual or determined reader can recover your values without the secret.
+- **At-rest encryption.** Without `SKY_ENV_SECRET`, the SQLite file is opaque ciphertext. No casual or determined reader can recover your values without the secret.
+- **Per-value salts.** Encrypting the same value twice produces different ciphertexts. An attacker comparing the database across snapshots cannot tell which values changed.
+- **Slow key derivation.** PBKDF2 with 100k iterations means brute-forcing the secret is computationally expensive, orders of magnitude slower than a naive sha256 hash.
+- **Standards-based.** If sky-env disappears tomorrow, you can decrypt your database with `openssl enc -aes-256-cbc -pbkdf2 -d -base64 -A -pass env:SKY_ENV_SECRET <<< "<ciphertext>"`.
 
-✓ **Per-value salts.** Encrypting the same value twice produces different ciphertexts. An attacker comparing the database across snapshots cannot tell which values changed.
+#### What it does NOT protect against
 
-✓ **Slow key derivation.** PBKDF2 with 100k iterations means brute-forcing the secret is computationally expensive — orders of magnitude slower than a naive sha256 hash.
+- **Losing the secret.** PBKDF2 is one-way. If you lose `SKY_ENV_SECRET`, your data is gone. There is no recovery, no backdoor, no support email. Treat your secret like an SSH private key.
+- **Active malware on your machine.** If something is running as your user, it can read both the database AND your environment variable. sky-env protects data **at rest**, not against running adversaries.
+- **Brief temp file exposure.** During encrypt/decrypt, the plaintext is briefly written to a temp file (so `openssl` can read it without the value appearing in process arguments). This file is created in the OS temp directory with default user-only permissions and deleted immediately. Single-user developer machines: fine. Multi-user shared servers: avoid sky-env or use a tmpfs path.
 
-✓ **Standards-based.** If sky-env disappears tomorrow, you can decrypt your database with `openssl enc -aes-256-cbc -pbkdf2 -d -base64 -A -pass env:SKY_ENV_SECRET <<< "<ciphertext>"`.
-
-### What it does NOT protect against
-
-✗ **Losing the secret.** PBKDF2 is one-way. If you lose `SKY_ENV_SECRET`, your data is gone. There is no recovery, no backdoor, no support email. Treat your secret like an SSH private key.
-
-✗ **Active malware on your machine.** If something is running as your user, it can read both the database AND your environment variable. sky-env protects data **at rest**, not against running adversaries.
-
-✗ **Brief temp file exposure.** During encrypt/decrypt, the plaintext is briefly written to a temp file (so `openssl` can read it without the value appearing in process arguments). This file is created in the OS temp directory with default user-only permissions and deleted immediately. Single-user developer machines: fine. Multi-user shared servers: avoid sky-env or use a tmpfs path.
-
----
-
-## Where is the data stored?
+### Where is the data stored?
 
 ```
 ~/.local/sky-env/skyenv.db    -- SQLite database
@@ -284,9 +331,7 @@ CREATE TABLE env_vars (
 
 Variable **keys** are stored in plain text (so you can grep for `WHERE key = 'API_KEY'`). Variable **values** are encrypted. Project names are also plain text. If you consider key names sensitive (e.g. `STRIPE_LIVE_SECRET_KEY`), keep this in mind.
 
----
-
-## Portability and backup
+### Portability and backup
 
 The single SQLite file is the entire data store. To move sky-env to a new machine:
 
@@ -305,49 +350,33 @@ export SKY_ENV_SECRET="<the same hex string from sky-env init>"
 
 The secret never lives in the database, so the database alone is useless without it. The secret never lives on disk (unless you put it in `.bashrc`/`.zshrc`), so it's safe from anyone reading your home directory.
 
-### Can I commit the database to GitHub?
+#### Can I commit the database to GitHub?
 
 **Private repo:** yes, this is a reasonable backup strategy. Anyone with repo access still cannot read values without the secret. The database is at-rest encrypted with PBKDF2(100k iterations) + AES-256-CBC. Brute-forcing is expensive enough that even a leaked private repo + sufficient compute would not yield secrets quickly. Make sure to:
+
 - Never commit your `SKY_ENV_SECRET` (never put it in repo files, only in your shell config or a secrets manager)
 - Rotate the secret periodically and re-import all values
 
-**Public repo:** technically possible but **not recommended**. Even with PBKDF2, a determined attacker with infinite time and compute can attempt offline brute force. If your secret has low entropy (which `sky-env init`'s secrets do not — they're 256 bits from `/dev/urandom`), this becomes feasible. Use private repos or out-of-band backups for sky-env databases.
+**Public repo:** technically possible but **not recommended**. Even with PBKDF2, a determined attacker with infinite time and compute can attempt offline brute force. If your secret has low entropy (which `sky-env init`'s secrets do not, because they're 256 bits from `/dev/urandom`), this becomes feasible. Use private repos or out-of-band backups for sky-env databases.
 
----
-
-## Sharing secrets with a team
+### Sharing secrets with a team
 
 The intended workflow:
 
 1. **One person on the team generates the secret** with `sky-env init` and shares it once via a secure channel (1Password, encrypted Slack DM, signed email, in person on a sticky note).
 2. **Each developer sets `SKY_ENV_SECRET`** in their shell config from that shared value.
 3. **The encrypted database is committed to your private repo** (or a shared dropbox / NAS / etc.).
-4. **`sky-env import dev`** populates the database when someone changes a variable.
+4. **When someone changes a variable, they run `sky-env import dev`.** This writes the values from the `.env` file into the database.
 5. **Everyone else `git pull`s** to get the updated encrypted database.
 6. **Everyone runs `sky-env print dev`** to see the latest values.
 
 When someone leaves the team, rotate the secret:
-1. Run `sky-env rotate` — confirm with `rotate`, and sky-env will back up the database, re-encrypt every value under a fresh 256-bit secret, and print the new secret
-2. Update `SKY_ENV_SECRET` in your shell config to the new value and reload
-3. Share the new secret with remaining teammates via your secure channel
-4. Commit the rotated database
-5. Once everyone has updated, delete the `~/.local/sky-env/skyenv.db.bak.*` backup
 
----
-
-## Command reference
-
-```
-sky-env init               Generate a new 256-bit secret (refuses if SKY_ENV_SECRET already set)
-sky-env import <env>       Encrypt and import .env.<env> (or .env, or interactive from .env.example)
-sky-env print <env>        Decrypt and print all variables for <env>
-sky-env set <env> <key>    Set a single variable (prompts for value via stdin)
-sky-env list               List all stored projects and their environments
-sky-env diff               Compare environments for the current project, show missing keys
-sky-env rotate             Rotate the encryption secret (re-encrypts every value, with backup)
-```
-
-The "current project" is always the basename of the working directory. You can manage multiple projects by `cd`-ing between them.
+1. Run `sky-env rotate`. Confirm with `rotate`, and sky-env will back up the database, re-encrypt every value under a fresh 256-bit secret, and print the new secret.
+2. Update `SKY_ENV_SECRET` in your shell config to the new value and reload.
+3. Share the new secret with remaining teammates via your secure channel.
+4. Commit the rotated database.
+5. Once everyone has updated, delete the `~/.local/sky-env/skyenv.db.bak.*` backup.
 
 ---
 
@@ -355,10 +384,10 @@ The "current project" is always the basename of the working directory. You can m
 
 Entirely in [Sky](https://github.com/anzellai/sky), a pure functional language that compiles to a single Go binary. The compiler is written in itself (self-hosted) and ships with:
 
-- **Hindley-Milner type inference** — no type annotations needed, but the compiler still catches every type mismatch
-- **Exhaustiveness checking** — all `case` expressions must cover every constructor
-- **No runtime panics from FFI** — Go errors flow through `Result String a` at the type level
-- **Single 8MB binary output** — no Node, no Python, no Go runtime, no shared libraries
+- **Hindley-Milner type inference.** No type annotations needed, but the compiler still catches every type mismatch.
+- **Exhaustiveness checking.** All `case` expressions must cover every constructor.
+- **No runtime panics from FFI.** Go errors flow through `Result String a` at the type level.
+- **Single 8MB binary output.** No Node, no Python, no Go runtime, no shared libraries.
 
 `sky-env` itself is ~600 lines of Sky source split across 11 modules. The encryption logic in `src/Env/Encrypt.sky` is ~70 lines. The whole thing builds in under 2 seconds.
 
@@ -368,7 +397,7 @@ If you're curious about Sky as a language, the [main repo](https://github.com/an
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ---
 
@@ -378,9 +407,9 @@ Bug reports and PRs welcome. The code is small and idiomatic Sky, so it's a good
 
 If you want to add a feature, please open an issue first to discuss. Things on the roadmap:
 
-- [ ] `sky-env export <env> > file` — explicit export to a file (currently you pipe `print`)
-- [ ] `sky-env unset <env> <key>` — remove a single variable
-- [ ] `sky-env rename <old> <new>` — rename an environment
-- [x] `sky-env rotate` — re-encrypt all values under a new secret in one command
+- [ ] `sky-env export <env> > file`: explicit export to a file (currently you pipe `print`)
+- [ ] `sky-env unset <env> <key>`: remove a single variable
+- [ ] `sky-env rename <old> <new>`: rename an environment
+- [x] `sky-env rotate`: re-encrypt all values under a new secret in one command
 - [ ] Per-project secrets (different secret per project)
 - [ ] Native AES via Sky stdlib (currently shells out to openssl)
